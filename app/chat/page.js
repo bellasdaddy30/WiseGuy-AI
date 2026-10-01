@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import ChatMessage from '../../components/ChatMessage';
 import styles from './chat.module.css';
 
-const PLACEHOLDER_REPLY = "I'm not connected yet — drop an API key in .env.local and I'll start talking back.";
+const ERROR_REPLY = "The AI service isn't responding right now. Check the API key in .env.local and try again.";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -28,6 +28,9 @@ export default function ChatPage() {
     setInput('');
     setLoading(true);
 
+    // Add an empty assistant bubble that we'll fill as the stream arrives
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -36,10 +39,29 @@ export default function ChatPage() {
       });
 
       if (!res.ok) throw new Error('API error');
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: 'assistant',
+            content: updated[updated.length - 1].content + chunk,
+          };
+          return updated;
+        });
+      }
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: PLACEHOLDER_REPLY }]);
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: 'assistant', content: ERROR_REPLY };
+        return updated;
+      });
     } finally {
       setLoading(false);
     }
@@ -58,7 +80,7 @@ export default function ChatPage() {
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} content={msg.content} />
         ))}
-        {loading && (
+        {loading && messages[messages.length - 1]?.content === '' && (
           <div className={styles.typing}>
             <span />
             <span />
