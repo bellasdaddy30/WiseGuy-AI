@@ -2,9 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import ChatMessage from '../../components/ChatMessage';
+import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import styles from './chat.module.css';
 
 const ERROR_REPLY = "The AI service isn't responding right now. Check the API key in .env.local and try again.";
+const MODEL_KEY = 'smartass_model';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -12,7 +14,15 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const bottomRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MODEL_KEY);
+      if (stored) setModel(stored);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,7 +45,7 @@ export default function ChatPage() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMsg] }),
+        body: JSON.stringify({ messages: [...messages, userMsg], model }),
       });
 
       if (!res.ok) throw new Error('API error');
@@ -88,6 +98,10 @@ export default function ChatPage() {
           </div>
         )}
         <div ref={bottomRef} />
+      </div>
+
+      <div className={styles.modelBadge}>
+        {MODELS.find(m => m.id === model)?.name ?? model}
       </div>
 
       <form className={styles.inputBar} onSubmit={handleSubmit}>

@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { isValidModel, DEFAULT_MODEL } from '../../../lib/models';
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -8,14 +9,16 @@ You're not rude — you're honest. You treat the user like an intelligent adult.
 Keep responses concise unless depth is clearly needed. Use plain language.`;
 
 export async function POST(request) {
-  const { messages } = await request.json();
+  const { messages, model: requestedModel } = await request.json();
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
   }
 
+  const model = isValidModel(requestedModel) ? requestedModel : DEFAULT_MODEL;
+
   const stream = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model,
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
     stream: true,
   });

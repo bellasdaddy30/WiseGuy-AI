@@ -44,6 +44,14 @@
   40%           { transform: translateY(-6px); }
 }
 
+.modelBadge {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
+  text-align: right;
+}
+
 .inputBar {
   display: flex;
   gap: 0.5rem;
