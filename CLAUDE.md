@@ -128,6 +128,7 @@ Inspect actual file contents before changing anything — don't overwrite blind.
 - Don't add dependencies without a reason. Prefer free/open-source; flag any cost.
 - No fake auth or payments presented as production-ready.
 - Ask before destructive git operations (force-push, reset --hard, rm).
+- After each step is verified working in the browser, commit with a descriptive message and push to main immediately. Never commit `.env` files of any kind.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
