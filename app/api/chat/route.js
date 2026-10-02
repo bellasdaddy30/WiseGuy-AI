@@ -13,6 +13,11 @@ function describeError(err, providerLabel) {
   return `${providerLabel} isn't responding right now.`;
 }
 
+function creativityToTemp(c) {
+  // creativity 1–5 → temperature 0.4–1.3
+  return [0.4, 0.65, 0.85, 1.05, 1.3][(c ?? 3) - 1] ?? 0.85;
+}
+
 export async function POST(request) {
   const { messages, model: requestedModel, personality, provider: explicitProvider } = await request.json();
 
@@ -30,11 +35,14 @@ export async function POST(request) {
   let stream;
   try {
     const client = getClient(model.provider);
-    stream = await client.chat.completions.create({
+    const reqBody = {
       model: model.id,
       messages: [{ role: 'system', content: buildSystemPrompt(personality) }, ...messages],
       stream: true,
-    });
+      temperature: creativityToTemp(personality?.creativity),
+    };
+    if (model.maxTokens) reqBody.max_tokens = model.maxTokens;
+    stream = await client.chat.completions.create(reqBody);
   } catch (err) {
     console.error(`[chat] ${providerLabel} / ${model.id}:`, err?.status ?? '', err?.message);
     return Response.json({ error: describeError(err, providerLabel) }, { status: 502 });

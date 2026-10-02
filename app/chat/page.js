@@ -88,7 +88,12 @@ export default function ChatPage() {
 
     try {
       const m  = localStorage.getItem(MODEL_KEY);
-      if (m && (MODELS.some(x => x.id === m) || m.startsWith('ollama::'))) setModel(m);
+      // Clear stale model selection if it's no longer the valid default
+      if (m && (MODELS.some(x => x.id === m) || m.startsWith('ollama::'))) {
+        setModel(m);
+      } else if (m) {
+        localStorage.removeItem(MODEL_KEY); // stale ID — fall back to new default
+      }
       const p  = localStorage.getItem(PERSONALITY_KEY);
       if (p) setPersonality({ ...DEFAULT_PERSONALITY, ...JSON.parse(p) });
       const vm = localStorage.getItem(VOICE_MODE_KEY);
@@ -360,12 +365,14 @@ export default function ChatPage() {
 
   function handleSubmit(e) {
     e.preventDefault();
+    unlockAudioContext();
     submitText(input.trim());
   }
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      unlockAudioContext();
       submitText(input.trim());
     }
   }
