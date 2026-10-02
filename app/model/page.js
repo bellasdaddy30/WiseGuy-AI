@@ -12,7 +12,7 @@ const PROVIDER_LABELS = {
   google: 'Google',
 };
 
-const PROVIDERS = ['openai', 'groq', 'google'];
+const PROVIDERS = ['groq', 'google', 'openai'];
 
 export default function ModelPage() {
   const [selected, setSelected] = useState(DEFAULT_MODEL);

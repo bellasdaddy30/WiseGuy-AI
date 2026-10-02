@@ -5,7 +5,7 @@ import ChatMessage from '../../components/ChatMessage';
 import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import styles from './chat.module.css';
 
-const ERROR_REPLY = "The AI service isn't responding right now. Check the API key in .env.local and try again.";
+const ERROR_REPLY = "The AI service isn't responding right now.";
 const MODEL_KEY = 'smartass_model';
 
 export default function ChatPage() {
@@ -20,7 +20,7 @@ export default function ChatPage() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(MODEL_KEY);
-      if (stored) setModel(stored);
+      if (stored && MODELS.some(m => m.id === stored)) setModel(stored);
     } catch {}
   }, []);
 
@@ -48,7 +48,10 @@ export default function ChatPage() {
         body: JSON.stringify({ messages: [...messages, userMsg], model }),
       });
 
-      if (!res.ok) throw new Error('API error');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || ERROR_REPLY);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -66,10 +69,10 @@ export default function ChatPage() {
           return updated;
         });
       }
-    } catch {
+    } catch (err) {
       setMessages(prev => {
         const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: ERROR_REPLY };
+        updated[updated.length - 1] = { role: 'assistant', content: err?.message || ERROR_REPLY };
         return updated;
       });
     } finally {
