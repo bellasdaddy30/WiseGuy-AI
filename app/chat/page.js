@@ -6,7 +6,7 @@ import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
 import {
   stripMarkdown, truncateForTts, nextVoice,
-  GOOGLE_VOICES, ELEVENLABS_VOICES,
+  GOOGLE_VOICES, ELEVENLABS_VOICES, PERSONA_BROWSER_TTS,
   TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE,
 } from '../../lib/tts';
@@ -165,9 +165,13 @@ export default function ChatPage() {
     const raw      = stripMarkdown(text);
     const clean    = provider === 'browser' ? truncateForTts(raw) : raw;
 
+    const persona = personality?.persona ?? 'smartass';
+
     if (provider === 'browser') {
+      const browserStyle = PERSONA_BROWSER_TTS[persona] ?? { rate: 1.05, pitch: 1.0 };
       const utt  = new SpeechSynthesisUtterance(clean);
-      utt.rate   = 1.05;
+      utt.rate   = browserStyle.rate;
+      utt.pitch  = browserStyle.pitch;
       utt.onend  = () => onEnd?.();
       window.speechSynthesis.speak(utt);
       return;
@@ -179,7 +183,7 @@ export default function ChatPage() {
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean, provider, voice }),
+        body: JSON.stringify({ text: clean, provider, voice, persona }),
       });
       if (!res.ok) { console.error('[tts]', res.status); onEnd?.(); return; }
 
