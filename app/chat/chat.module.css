@@ -44,12 +44,56 @@
   40%           { transform: translateY(-6px); }
 }
 
-.modelBadge {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.controlsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.25rem 0;
   border-top: 1px solid var(--border);
-  text-align: right;
+}
+
+.modelName {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.voiceToggles {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ctrlBtn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ctrlBtn:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.ctrlActive {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ctrlHandsFree {
+  border-color: #e05555;
+  color: #e05555;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.micError {
+  font-size: 0.8rem;
+  color: #e05555;
+  text-align: center;
+  padding: 0.3rem 0;
 }
 
 .inputBar {
@@ -83,6 +127,38 @@
 
 .textarea::placeholder {
   color: var(--text-muted);
+}
+
+.micBtn {
+  align-self: flex-end;
+  padding: 0.6rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.micBtn:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+}
+
+.micActive {
+  border-color: #e05555;
+  background: color-mix(in srgb, #e05555 15%, var(--surface));
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #e05555 40%, transparent); }
+  50%       { box-shadow: 0 0 0 5px color-mix(in srgb, #e05555 0%, transparent); }
+}
+
+.micBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .sendBtn {
