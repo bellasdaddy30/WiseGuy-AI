@@ -36,6 +36,7 @@ export default function ChatPage() {
   const [ttsProvider, setTtsProvider]   = useState(DEFAULT_TTS_PROVIDER);
   const [googleVoice, setGoogleVoice]   = useState(DEFAULT_GOOGLE_VOICE);
   const [elVoice, setElVoice]           = useState(DEFAULT_ELEVENLABS_VOICE);
+  const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
   const [micError, setMicError]         = useState('');
 
   const bottomRef      = useRef(null);
@@ -77,7 +78,10 @@ export default function ChatPage() {
       const hf = localStorage.getItem(HANDS_FREE_KEY);
       if (hf !== null) setHandsFree(hf === 'true');
       const tp = localStorage.getItem(TTS_PROVIDER_KEY);
-      if (TTS_PROVIDERS.includes(tp)) setTtsProvider(tp);
+      if (TTS_PROVIDERS.includes(tp)) {
+        setTtsProvider(tp);
+        if (tp === 'elevenlabs') fetchElVoices();
+      }
       const gv = localStorage.getItem(TTS_VOICE_GOOGLE_KEY);
       if (gv && GOOGLE_VOICES.some(v => v.id === gv)) setGoogleVoice(gv);
       const ev = localStorage.getItem(TTS_VOICE_ELEVENLABS_KEY);
@@ -163,7 +167,9 @@ export default function ChatPage() {
 
     const provider = ttsProviderRef.current;
     const raw      = stripMarkdown(text);
-    const clean    = provider === 'browser' ? truncateForTts(raw) : raw;
+    const clean    = provider === 'browser'    ? truncateForTts(raw, 500)
+                   : provider === 'elevenlabs' ? truncateForTts(raw, 1000)
+                   : raw;
 
     const persona = personality?.persona ?? 'smartass';
 
@@ -185,7 +191,14 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: clean, provider, voice, persona }),
       });
-      if (!res.ok) { console.error('[tts]', res.status); onEnd?.(); return; }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || `Voice error ${res.status}`;
+        setMicError(msg);
+        setTimeout(() => setMicError(''), 6000);
+        onEnd?.();
+        return;
+      }
 
       const arrayBuffer = await res.arrayBuffer();
       const ctx = audioCtxRef.current;
@@ -296,9 +309,25 @@ export default function ChatPage() {
     startListening();
   }
 
+  function fetchElVoices() {
+    fetch('/api/elevenlabs-voices')
+      .then(r => r.json())
+      .then(data => {
+        if (data.voices?.length) {
+          setElVoices(data.voices);
+          // If current voice isn't in the fetched list, switch to the first available
+          setElVoice(prev =>
+            data.voices.some(v => v.id === prev) ? prev : data.voices[0].id
+          );
+        }
+      })
+      .catch(() => {});
+  }
+
   function cycleProvider() {
     const next = TTS_PROVIDERS[(TTS_PROVIDERS.indexOf(ttsProvider) + 1) % TTS_PROVIDERS.length];
     setTtsProvider(next);
+    if (next === 'elevenlabs') fetchElVoices();
     try { localStorage.setItem(TTS_PROVIDER_KEY, next); } catch {}
   }
 
@@ -308,7 +337,7 @@ export default function ChatPage() {
       setGoogleVoice(next);
       try { localStorage.setItem(TTS_VOICE_GOOGLE_KEY, next); } catch {}
     } else if (ttsProvider === 'elevenlabs') {
-      const next = nextVoice(ELEVENLABS_VOICES, elVoice);
+      const next = nextVoice(elVoices, elVoice);
       setElVoice(next);
       try { localStorage.setItem(TTS_VOICE_ELEVENLABS_KEY, next); } catch {}
     }
@@ -350,7 +379,7 @@ export default function ChatPage() {
   const currentVoiceName = ttsProvider === 'google'
     ? GOOGLE_VOICES.find(v => v.id === googleVoice)?.name
     : ttsProvider === 'elevenlabs'
-    ? ELEVENLABS_VOICES.find(v => v.id === elVoice)?.name
+    ? elVoices.find(v => v.id === elVoice)?.name
     : null;
 
   return (

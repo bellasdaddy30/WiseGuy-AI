@@ -140,9 +140,16 @@ async function elevenLabsTts(text, voiceId, persona) {
   );
 
   if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    console.error('[tts/elevenlabs]', res.status, err.slice(0, 300));
-    return Response.json({ error: `ElevenLabs TTS error ${res.status}.` }, { status: 502 });
+    const body = await res.json().catch(() => ({}));
+    const code = body?.detail?.code ?? '';
+    console.error('[tts/elevenlabs]', res.status, code);
+    if (res.status === 402 || code === 'paid_plan_required') {
+      return Response.json({ error: 'That ElevenLabs voice requires a paid plan. Switch to Google or Browser TTS, or pick a different voice.' }, { status: 502 });
+    }
+    if (code === 'quota_exceeded') {
+      return Response.json({ error: 'ElevenLabs credits exhausted for this month. Switch to Google or Browser TTS.' }, { status: 502 });
+    }
+    return Response.json({ error: `ElevenLabs error ${res.status}.` }, { status: 502 });
   }
 
   return new Response(res.body, { headers: { 'Content-Type': 'audio/mpeg' } });
