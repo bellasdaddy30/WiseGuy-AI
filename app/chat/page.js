@@ -9,9 +9,9 @@ import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitl
 import {
   stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
   BROWSER_SEGMENT_STYLE,
-  GOOGLE_VOICES, ELEVENLABS_VOICES, PERSONA_BROWSER_TTS,
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY,
-  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE,
+  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, PERSONA_BROWSER_TTS,
+  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY,
+  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
 import styles from './chat.module.css';
@@ -22,8 +22,8 @@ const VOICE_MODE_KEY   = 'smartass_voice_mode';
 const AI_VOICE_KEY     = 'smartass_ai_voice';
 const HANDS_FREE_KEY   = 'smartass_hands_free';
 
-const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs'];
-const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs' };
+const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai'];
+const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI' };
 
 export default function ChatPage() {
   const [messages, setMessages]         = useState([
@@ -41,6 +41,7 @@ export default function ChatPage() {
   const [googleVoice, setGoogleVoice]   = useState(DEFAULT_GOOGLE_VOICE);
   const [elVoice, setElVoice]           = useState(DEFAULT_ELEVENLABS_VOICE);
   const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
+  const [oaVoice, setOaVoice]           = useState(DEFAULT_OPENAI_VOICE);
   const [micError, setMicError]         = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [convHistory, setConvHistory]   = useState([]);
@@ -64,6 +65,7 @@ export default function ChatPage() {
   const ttsProviderRef = useRef(ttsProvider);
   const googleVoiceRef = useRef(googleVoice);
   const elVoiceRef     = useRef(elVoice);
+  const oaVoiceRef     = useRef(oaVoice);
   const loadingRef     = useRef(loading);
   const messagesRef    = useRef(messages);
 
@@ -73,6 +75,7 @@ export default function ChatPage() {
   useEffect(() => { ttsProviderRef.current   = ttsProvider; }, [ttsProvider]);
   useEffect(() => { googleVoiceRef.current   = googleVoice; }, [googleVoice]);
   useEffect(() => { elVoiceRef.current       = elVoice;     }, [elVoice]);
+  useEffect(() => { oaVoiceRef.current       = oaVoice;     }, [oaVoice]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
 
@@ -115,6 +118,8 @@ export default function ChatPage() {
       if (gv && GOOGLE_VOICES.some(v => v.id === gv)) setGoogleVoice(gv);
       const ev = localStorage.getItem(TTS_VOICE_ELEVENLABS_KEY);
       if (ev && ELEVENLABS_VOICES.some(v => v.id === ev)) setElVoice(ev);
+      const ov = localStorage.getItem(TTS_VOICE_OPENAI_KEY);
+      if (ov && OPENAI_VOICES.some(v => v.id === ov)) setOaVoice(ov);
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -196,10 +201,10 @@ export default function ChatPage() {
   // Each finished sentence is sent to the voice as soon as it streams in, so
   // audio starts while the rest of the reply is still being written. Chunks
   // are fetched in parallel but always played in order.
-  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000 };
+  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000, openai: 2000 };
   const FIRST_CHUNK_MIN = 1;    // speak the first sentence immediately
   // Then batch sentences to limit API calls (Google's free voice quota is small).
-  const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, browser: 200 };
+  const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, openai: 300, browser: 200 };
   // After a quota/rate error, skip that provider for a while and use the browser voice.
   const VOICE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -250,7 +255,9 @@ export default function ChatPage() {
 
   async function fetchSpeechAudio(text, provider, persona) {
     try {
-      const voice = provider === 'google' ? googleVoiceRef.current : elVoiceRef.current;
+      const voice = provider === 'google' ? googleVoiceRef.current
+                  : provider === 'openai' ? oaVoiceRef.current
+                  : elVoiceRef.current;
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,6 +517,10 @@ export default function ChatPage() {
       const next = nextVoice(elVoices, elVoice);
       setElVoice(next);
       try { localStorage.setItem(TTS_VOICE_ELEVENLABS_KEY, next); } catch {}
+    } else if (ttsProvider === 'openai') {
+      const next = nextVoice(OPENAI_VOICES, oaVoice);
+      setOaVoice(next);
+      try { localStorage.setItem(TTS_VOICE_OPENAI_KEY, next); } catch {}
     }
   }
 
@@ -550,6 +561,8 @@ export default function ChatPage() {
     ? GOOGLE_VOICES.find(v => v.id === googleVoice)?.name
     : ttsProvider === 'elevenlabs'
     ? elVoices.find(v => v.id === elVoice)?.name
+    : ttsProvider === 'openai'
+    ? OPENAI_VOICES.find(v => v.id === oaVoice)?.name
     : null;
 
   return (

@@ -1,4 +1,5 @@
 import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG } from '../../../lib/tts';
+import { getApiKey } from '../../../lib/providers';
 
 function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
   const buf  = new ArrayBuffer(44);
@@ -137,6 +138,40 @@ async function elevenLabsTts(rawText, voiceId, persona) {
   return new Response(res.body, { headers: { 'Content-Type': 'audio/mpeg' } });
 }
 
+// OpenAI gpt-4o-mini-tts: `instructions` steers delivery without being spoken.
+async function openAiTts(text, voice, persona) {
+  const apiKey = getApiKey('openai');
+  if (!apiKey) {
+    return Response.json({ error: 'OpenAI voice not set up. Add OPENAI_API_KEY to .env.local and restart.' }, { status: 500 });
+  }
+
+  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini-tts',
+      voice,
+      input: text,
+      response_format: 'mp3',
+      ...(PERSONA_VOICE_STYLE[persona] && { instructions: PERSONA_VOICE_STYLE[persona] }),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    console.error('[tts/openai]', res.status, body?.error?.code ?? '', body?.error?.message ?? '');
+    if (res.status === 429) {
+      return Response.json({ error: 'OpenAI voice limit or credits reached — using the browser voice for now.' }, { status: 429 });
+    }
+    if (res.status === 401) {
+      return Response.json({ error: 'OpenAI rejected the API key. Check OPENAI_API_KEY in .env.local.' }, { status: 502 });
+    }
+    return Response.json({ error: `OpenAI voice error ${res.status}.` }, { status: 502 });
+  }
+
+  return new Response(res.body, { headers: { 'Content-Type': 'audio/mpeg' } });
+}
+
 export async function POST(request) {
   const { text, provider, voice, persona } = await request.json();
 
@@ -146,6 +181,7 @@ export async function POST(request) {
 
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);
+  if (provider === 'openai')      return openAiTts(text, voice || 'ash', persona);
 
   return Response.json({ error: 'Unknown TTS provider.' }, { status: 400 });
 }
