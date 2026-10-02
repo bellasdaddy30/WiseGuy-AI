@@ -1,7 +1,5 @@
-import OpenAI from 'openai';
-import { isValidModel, DEFAULT_MODEL } from '../../../lib/models';
-
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getModel } from '../../../lib/models';
+import { getClient } from '../../../lib/providers';
 
 const SYSTEM_PROMPT = `You are SmartAss AI — sharp, direct, and genuinely useful.
 You have a personality: you're confident, a little sarcastic when it's warranted, and you don't pad your answers with corporate filler. You get to the point.
@@ -15,10 +13,11 @@ export async function POST(request) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
   }
 
-  const model = isValidModel(requestedModel) ? requestedModel : DEFAULT_MODEL;
+  const model = getModel(requestedModel);
+  const client = getClient(model.provider);
 
   const stream = await client.chat.completions.create({
-    model,
+    model: model.id,
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
     stream: true,
   });

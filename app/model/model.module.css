@@ -10,6 +10,19 @@
   margin-bottom: 1.75rem;
 }
 
+.group {
+  margin-bottom: 1.75rem;
+}
+
+.groupLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
