@@ -240,7 +240,7 @@ export async function POST(request) {
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);
   if (provider === 'openai')      return openAiTts(text, voice || 'ash', persona);
-  if (provider === 'orpheus')     return orpheusTts(text, voice || 'tara', persona);
+  if (provider === 'orpheus')     return orpheusTts(text, voice || 'autumn', persona);
 
   return Response.json({ error: 'Unknown TTS provider.' }, { status: 400 });
 }
