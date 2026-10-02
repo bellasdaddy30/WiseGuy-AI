@@ -8,10 +8,12 @@ import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
 import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
   stripMarkdown, truncateForTts, nextVoice,
+  BROWSER_SEGMENT_STYLE,
   GOOGLE_VOICES, ELEVENLABS_VOICES, PERSONA_BROWSER_TTS,
   TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE,
 } from '../../lib/tts';
+import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
 import styles from './chat.module.css';
 
 const ERROR_REPLY      = "The AI service isn't responding right now.";
@@ -200,11 +202,17 @@ export default function ChatPage() {
 
     if (provider === 'browser') {
       const browserStyle = PERSONA_BROWSER_TTS[persona] ?? { rate: 1.05, pitch: 1.0 };
-      const utt  = new SpeechSynthesisUtterance(clean);
-      utt.rate   = browserStyle.rate;
-      utt.pitch  = browserStyle.pitch;
-      utt.onend  = () => onEnd?.();
-      window.speechSynthesis.speak(utt);
+      const segments = splitVoiceSegments(clean).filter(s => s.text.trim());
+      if (segments.length === 0) { onEnd?.(); return; }
+      segments.forEach((seg, i) => {
+        const mod  = BROWSER_SEGMENT_STYLE[seg.style];
+        const utt  = new SpeechSynthesisUtterance(seg.text);
+        utt.rate   = Math.min(2, browserStyle.rate * mod.rate);
+        utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
+        utt.volume = mod.volume;
+        if (i === segments.length - 1) utt.onend = () => onEnd?.();
+        window.speechSynthesis.speak(utt);
+      });
       return;
     }
 
@@ -214,7 +222,7 @@ export default function ChatPage() {
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean, provider, voice, persona }),
+        body: JSON.stringify({ text: toProviderTags(clean, provider), provider, voice, persona }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));

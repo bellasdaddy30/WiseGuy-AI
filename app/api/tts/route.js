@@ -109,7 +109,8 @@ async function elevenLabsTts(text, voiceId, persona) {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_turbo_v2_5',
+        // eleven_v3 understands [whispers]/[shouts]; turbo would read them aloud.
+        model_id: /\[(whispers|shouts)\]/.test(text) ? 'eleven_v3' : 'eleven_turbo_v2_5',
         voice_settings: {
             similarity_boost: 0.75,
             use_speaker_boost: true,
