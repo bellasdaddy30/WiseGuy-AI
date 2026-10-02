@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ChatMessage from '../../components/ChatMessage';
 import { MODELS, DEFAULT_MODEL } from '../../lib/models';
+import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
 import styles from './chat.module.css';
 
 const ERROR_REPLY = "The AI service isn't responding right now.";
@@ -15,13 +16,16 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [personality, setPersonality] = useState(DEFAULT_PERSONALITY);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(MODEL_KEY);
-      if (stored && MODELS.some(m => m.id === stored)) setModel(stored);
+      const storedModel = localStorage.getItem(MODEL_KEY);
+      if (storedModel && MODELS.some(m => m.id === storedModel)) setModel(storedModel);
+      const storedPersonality = localStorage.getItem(PERSONALITY_KEY);
+      if (storedPersonality) setPersonality({ ...DEFAULT_PERSONALITY, ...JSON.parse(storedPersonality) });
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -47,7 +51,7 @@ export default function ChatPage() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMsg], model }),
+        body: JSON.stringify({ messages: [...messages, userMsg], model, personality }),
       });
 
       if (!res.ok) {
