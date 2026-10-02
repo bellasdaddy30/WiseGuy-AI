@@ -172,6 +172,64 @@ async function openAiTts(text, voice, persona) {
   return new Response(res.body, { headers: { 'Content-Type': 'audio/mpeg' } });
 }
 
+// Inject Orpheus emotion tags at sentence boundaries based on persona.
+// Tags like <laugh>, <sigh>, <chuckle> trigger real vocal reactions.
+function injectOrpheusEmotions(text, persona) {
+  const rules = {
+    smartass:       { tag: '<chuckle>', every: 3 },
+    roast_master:   { tag: '<laugh>',   every: 2 },
+    hype_man:       { tag: '<laugh>',   every: 2 },
+    unfiltered:     { tag: '<sigh>',    every: 3 },
+    conspiracy_nut: { tag: '<gasp>',    every: 3 },
+    coach:          { tag: '<groan>',   every: 3 },
+    therapist:      { tag: '<sigh>',    every: 3 },
+    philosopher:    { tag: '<sigh>',    every: 3 },
+    pirate:         { tag: '<laugh>',   every: 2 },
+    evil_genius:    { tag: '<laugh>',   every: 2 },
+    street_smart:   { tag: '<chuckle>', every: 3 },
+  };
+  const rule = rules[persona];
+  if (!rule) return text;
+  const parts = text.match(/[^.!?]+[.!?]+\s*/g) || [text];
+  return parts.map((s, i) =>
+    (i + 1) % rule.every === 0 ? s.trimEnd() + ` ${rule.tag} ` : s
+  ).join('');
+}
+
+async function orpheusTts(text, voice, persona) {
+  const apiKey = getApiKey('groq');
+  if (!apiKey) {
+    return Response.json({ error: 'Groq key not set. Add GROQ_API_KEY to .env.local.' }, { status: 500 });
+  }
+
+  const enhanced = injectOrpheusEmotions(text, persona);
+
+  const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'canopylabs/orpheus-v1-english',
+      voice: voice || 'tara',
+      input: enhanced,
+      response_format: 'wav',
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    console.error('[tts/orpheus]', res.status, JSON.stringify(body).slice(0, 200));
+    if (res.status === 429) {
+      return Response.json({ error: 'Orpheus rate limited — try again in a moment.' }, { status: 429 });
+    }
+    return Response.json({ error: `Orpheus TTS error ${res.status}.` }, { status: 502 });
+  }
+
+  return new Response(res.body, { headers: { 'Content-Type': 'audio/wav' } });
+}
+
 export async function POST(request) {
   const { text, provider, voice, persona } = await request.json();
 
@@ -182,6 +240,7 @@ export async function POST(request) {
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);
   if (provider === 'openai')      return openAiTts(text, voice || 'ash', persona);
+  if (provider === 'orpheus')     return orpheusTts(text, voice || 'tara', persona);
 
   return Response.json({ error: 'Unknown TTS provider.' }, { status: 400 });
 }

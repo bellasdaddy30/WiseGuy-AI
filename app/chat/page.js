@@ -9,9 +9,9 @@ import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitl
 import {
   stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
   BROWSER_SEGMENT_STYLE,
-  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, PERSONA_BROWSER_TTS,
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY,
-  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE,
+  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES, PERSONA_BROWSER_TTS,
+  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
 import styles from './chat.module.css';
@@ -22,8 +22,8 @@ const VOICE_MODE_KEY   = 'smartass_voice_mode';
 const AI_VOICE_KEY     = 'smartass_ai_voice';
 const HANDS_FREE_KEY   = 'smartass_hands_free';
 
-const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai'];
-const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI' };
+const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai', 'orpheus'];
+const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI', orpheus: 'Orpheus' };
 
 export default function ChatPage() {
   const [messages, setMessages]         = useState([
@@ -42,6 +42,7 @@ export default function ChatPage() {
   const [elVoice, setElVoice]           = useState(DEFAULT_ELEVENLABS_VOICE);
   const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
   const [oaVoice, setOaVoice]           = useState(DEFAULT_OPENAI_VOICE);
+  const [orVoice, setOrVoice]           = useState(DEFAULT_ORPHEUS_VOICE);
   const [micError, setMicError]         = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [convHistory, setConvHistory]   = useState([]);
@@ -66,6 +67,7 @@ export default function ChatPage() {
   const googleVoiceRef = useRef(googleVoice);
   const elVoiceRef     = useRef(elVoice);
   const oaVoiceRef     = useRef(oaVoice);
+  const orVoiceRef     = useRef(orVoice);
   const loadingRef     = useRef(loading);
   const messagesRef    = useRef(messages);
 
@@ -76,6 +78,7 @@ export default function ChatPage() {
   useEffect(() => { googleVoiceRef.current   = googleVoice; }, [googleVoice]);
   useEffect(() => { elVoiceRef.current       = elVoice;     }, [elVoice]);
   useEffect(() => { oaVoiceRef.current       = oaVoice;     }, [oaVoice]);
+  useEffect(() => { orVoiceRef.current       = orVoice;     }, [orVoice]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
 
@@ -120,6 +123,8 @@ export default function ChatPage() {
       if (ev && ELEVENLABS_VOICES.some(v => v.id === ev)) setElVoice(ev);
       const ov = localStorage.getItem(TTS_VOICE_OPENAI_KEY);
       if (ov && OPENAI_VOICES.some(v => v.id === ov)) setOaVoice(ov);
+      const rv = localStorage.getItem(TTS_VOICE_ORPHEUS_KEY);
+      if (rv && ORPHEUS_VOICES.some(v => v.id === rv)) setOrVoice(rv);
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -255,8 +260,9 @@ export default function ChatPage() {
 
   async function fetchSpeechAudio(text, provider, persona) {
     try {
-      const voice = provider === 'google' ? googleVoiceRef.current
-                  : provider === 'openai' ? oaVoiceRef.current
+      const voice = provider === 'google'   ? googleVoiceRef.current
+                  : provider === 'openai'   ? oaVoiceRef.current
+                  : provider === 'orpheus'  ? orVoiceRef.current
                   : elVoiceRef.current;
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -521,6 +527,10 @@ export default function ChatPage() {
       const next = nextVoice(OPENAI_VOICES, oaVoice);
       setOaVoice(next);
       try { localStorage.setItem(TTS_VOICE_OPENAI_KEY, next); } catch {}
+    } else if (ttsProvider === 'orpheus') {
+      const next = nextVoice(ORPHEUS_VOICES, orVoice);
+      setOrVoice(next);
+      try { localStorage.setItem(TTS_VOICE_ORPHEUS_KEY, next); } catch {}
     }
   }
 
@@ -563,6 +573,8 @@ export default function ChatPage() {
     ? elVoices.find(v => v.id === elVoice)?.name
     : ttsProvider === 'openai'
     ? OPENAI_VOICES.find(v => v.id === oaVoice)?.name
+    : ttsProvider === 'orpheus'
+    ? ORPHEUS_VOICES.find(v => v.id === orVoice)?.name
     : null;
 
   return (
