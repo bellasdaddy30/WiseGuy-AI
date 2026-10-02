@@ -52,6 +52,29 @@
   border-top: 1px solid var(--border);
 }
 
+.leftControls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.historyBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.45rem;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.historyBtn:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
 .modelName {
   font-size: 0.75rem;
   color: var(--text-muted);

@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatMessage from '../../components/ChatMessage';
+import HistorySidebar from '../../components/HistorySidebar';
 import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
+import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
   stripMarkdown, truncateForTts, nextVoice,
   GOOGLE_VOICES, ELEVENLABS_VOICES, PERSONA_BROWSER_TTS,
@@ -38,6 +40,11 @@ export default function ChatPage() {
   const [elVoice, setElVoice]           = useState(DEFAULT_ELEVENLABS_VOICE);
   const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
   const [micError, setMicError]         = useState('');
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const [convHistory, setConvHistory]   = useState([]);
+
+  const convIdRef      = useRef(null);
+  const convCreatedRef = useRef(null);
 
   const bottomRef      = useRef(null);
   const inputRef       = useRef(null);
@@ -66,6 +73,19 @@ export default function ChatPage() {
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
 
   useEffect(() => {
+    // Load conversation history
+    const hist = loadHistory();
+    setConvHistory(hist);
+    if (hist.length > 0) {
+      const latest = hist[0];
+      convIdRef.current      = latest.id;
+      convCreatedRef.current = latest.created;
+      setMessages(latest.messages);
+    } else {
+      convIdRef.current      = makeConvId();
+      convCreatedRef.current = Date.now();
+    }
+
     try {
       const m  = localStorage.getItem(MODEL_KEY);
       if (m && (MODELS.some(x => x.id === m) || m.startsWith('ollama::'))) setModel(m);
@@ -276,6 +296,18 @@ export default function ChatPage() {
         });
       }
 
+      // Auto-save conversation after each successful exchange
+      const savedMessages = [...history, userMsg, { role: 'assistant', content: fullResponse }];
+      const now = Date.now();
+      saveConversation({
+        id:       convIdRef.current,
+        title:    convTitle(savedMessages),
+        created:  convCreatedRef.current,
+        updated:  now,
+        messages: savedMessages,
+      });
+      setConvHistory(loadHistory());
+
       // In hands-free mode, start listening again after AI finishes speaking
       speakText(fullResponse, () => {
         if (handsFreeModeRef.current) startListening();
@@ -291,6 +323,40 @@ export default function ChatPage() {
       if (!handsFreeModeRef.current) inputRef.current?.focus();
     }
   }, [model, personality]); // eslint-disable-line
+
+  function startNewChat() {
+    stopAudio();
+    recognitionRef.current?.stop();
+    convIdRef.current      = makeConvId();
+    convCreatedRef.current = Date.now();
+    setMessages([{ role: 'assistant', content: "Oh good, you're here. Ask me something." }]);
+    setSidebarOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  function loadConv(conv) {
+    stopAudio();
+    recognitionRef.current?.stop();
+    convIdRef.current      = conv.id;
+    convCreatedRef.current = conv.created;
+    setMessages(conv.messages);
+    setSidebarOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  function handleDeleteConv(id) {
+    deleteConversation(id);
+    const updated = loadHistory();
+    setConvHistory(updated);
+    // If we deleted the active conversation, start fresh
+    if (id === convIdRef.current) {
+      if (updated.length > 0) {
+        loadConv(updated[0]);
+      } else {
+        startNewChat();
+      }
+    }
+  }
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -384,6 +450,15 @@ export default function ChatPage() {
 
   return (
     <div className={styles.page}>
+      <HistorySidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        history={convHistory}
+        activeId={convIdRef.current}
+        onLoad={loadConv}
+        onNew={startNewChat}
+        onDelete={handleDeleteConv}
+      />
       <div className={styles.thread}>
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} content={msg.content} />
@@ -397,11 +472,18 @@ export default function ChatPage() {
       {micError && <div className={styles.micError}>{micError}</div>}
 
       <div className={styles.controlsBar}>
+        <div className={styles.leftControls}>
+        <button
+          className={styles.historyBtn}
+          onClick={() => setSidebarOpen(o => !o)}
+          title="Conversation history"
+        >☰</button>
         <span className={styles.modelName}>
           {model.startsWith('ollama::')
             ? model.slice('ollama::'.length)
             : MODELS.find(m => m.id === model)?.name ?? model}
         </span>
+        </div>
 
         <div className={styles.voiceToggles}>
           <button
