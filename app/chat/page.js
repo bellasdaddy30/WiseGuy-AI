@@ -202,7 +202,10 @@ export default function ChatPage() {
 
     if (provider === 'browser') {
       const browserStyle = PERSONA_BROWSER_TTS[persona] ?? { rate: 1.05, pitch: 1.0 };
-      const segments = splitVoiceSegments(clean).filter(s => s.text.trim());
+      const laughText = persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
+      const segments = splitVoiceSegments(clean)
+        .map(s => s.style === 'laugh' ? { ...s, text: laughText } : s)
+        .filter(s => s.text.trim());
       if (segments.length === 0) { onEnd?.(); return; }
       segments.forEach((seg, i) => {
         const mod  = BROWSER_SEGMENT_STYLE[seg.style];
@@ -222,7 +225,7 @@ export default function ChatPage() {
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: toProviderTags(clean, provider), provider, voice, persona }),
+        body: JSON.stringify({ text: toProviderTags(clean, provider, persona), provider, voice, persona }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));

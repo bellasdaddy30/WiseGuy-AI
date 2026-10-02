@@ -7,6 +7,7 @@ function renderAssistant(content) {
   return splitVoiceSegments(text).map((seg, i) =>
     seg.style === 'whisper' ? <span key={i} className={styles.whisper}>{seg.text}</span>
     : seg.style === 'shout' ? <strong key={i} className={styles.shout}>{seg.text}</strong>
+    : seg.style === 'laugh' ? <em key={i} className={styles.whisper}> (laughs) </em>
     : <span key={i}>{seg.text}</span>
   );
 }

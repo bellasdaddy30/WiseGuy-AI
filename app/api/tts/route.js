@@ -1,3 +1,5 @@
+import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG } from '../../../lib/tts';
+
 function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
   const buf  = new ArrayBuffer(44);
   const view = new DataView(buf);
@@ -22,22 +24,6 @@ function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSampl
 }
 
 
-const PERSONA_ELEVENLABS_SETTINGS = {
-  smartass:      { stability: 0.45, style: 0.50 },
-  unfiltered:    { stability: 0.60, style: 0.20 },
-  roast_master:  { stability: 0.30, style: 0.80 },
-  hype_man:      { stability: 0.15, style: 0.95 },
-  street_smart:  { stability: 0.55, style: 0.40 },
-  conspiracy_nut:{ stability: 0.35, style: 0.70 },
-  professional:  { stability: 0.70, style: 0.10 },
-  coach:         { stability: 0.25, style: 0.85 },
-  therapist:     { stability: 0.65, style: 0.25 },
-  philosopher:   { stability: 0.60, style: 0.35 },
-  pirate:        { stability: 0.20, style: 0.90 },
-  evil_genius:   { stability: 0.30, style: 0.85 },
-  girlfriend:    { stability: 0.40, style: 0.65 },
-  boyfriend:     { stability: 0.50, style: 0.55 },
-};
 
 async function googleTts(text, voiceName, persona) {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
@@ -46,7 +32,13 @@ async function googleTts(text, voiceName, persona) {
   }
 
   const requestBody = {
-    contents: [{ parts: [{ text }] }],
+    // speechMetadata.style directs the delivery without being spoken.
+    contents: [{
+      parts: [{
+        text,
+        ...(PERSONA_VOICE_STYLE[persona] && { speechMetadata: { style: PERSONA_VOICE_STYLE[persona] } }),
+      }],
+    }],
     generationConfig: {
       responseModalities: ['AUDIO'],
       speechConfig: {
@@ -90,7 +82,10 @@ async function googleTts(text, voiceName, persona) {
   return new Response(wav, { headers: { 'Content-Type': 'audio/wav' } });
 }
 
-async function elevenLabsTts(text, voiceId, persona) {
+async function elevenLabsTts(rawText, voiceId, persona) {
+  const tag  = PERSONA_ELEVENLABS_TAG[persona];
+  const text = tag ? `${tag} ${rawText}` : rawText;
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -109,8 +104,8 @@ async function elevenLabsTts(text, voiceId, persona) {
       },
       body: JSON.stringify({
         text,
-        // eleven_v3 understands [whispers]/[shouts]; turbo would read them aloud.
-        model_id: /\[(whispers|shouts)\]/.test(text) ? 'eleven_v3' : 'eleven_turbo_v2_5',
+        // eleven_v3 understands [tags]; turbo would read them aloud.
+        model_id: /\[[a-z][a-z ]*\]/i.test(text) ? 'eleven_v3' : 'eleven_turbo_v2_5',
         voice_settings: {
             similarity_boost: 0.75,
             use_speaker_boost: true,
