@@ -59,6 +59,9 @@ async function googleTts(text, voiceName, persona) {
   if (!res.ok) {
     const err = await res.text().catch(() => '');
     console.error('[tts/google]', res.status, err.slice(0, 300));
+    if (res.status === 429) {
+      return Response.json({ error: 'Google voice limit reached — using the browser voice for now.' }, { status: 429 });
+    }
     return Response.json({ error: `Google TTS error ${res.status}.` }, { status: 502 });
   }
 
@@ -123,7 +126,10 @@ async function elevenLabsTts(rawText, voiceId, persona) {
       return Response.json({ error: 'That ElevenLabs voice requires a paid plan. Switch to Google or Browser TTS, or pick a different voice.' }, { status: 502 });
     }
     if (code === 'quota_exceeded') {
-      return Response.json({ error: 'ElevenLabs credits exhausted for this month. Switch to Google or Browser TTS.' }, { status: 502 });
+      return Response.json({ error: 'ElevenLabs credits used up — using the browser voice for now.' }, { status: 429 });
+    }
+    if (res.status === 429) {
+      return Response.json({ error: 'ElevenLabs is busy — using the browser voice for now.' }, { status: 429 });
     }
     return Response.json({ error: `ElevenLabs error ${res.status}.` }, { status: 502 });
   }

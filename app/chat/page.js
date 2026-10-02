@@ -56,6 +56,7 @@ export default function ChatPage() {
   const audioCtxRef    = useRef(null);
   const sourceNodeRef  = useRef(null);
   const speechRef      = useRef(null);
+  const voiceCooldownRef = useRef({}); // provider -> timestamp until which it's skipped
   // Refs so async closures always see current values
   const voiceModeRef   = useRef(voiceMode);
   const aiVoiceRef     = useRef(aiVoice);
@@ -197,7 +198,10 @@ export default function ChatPage() {
   // are fetched in parallel but always played in order.
   const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000 };
   const FIRST_CHUNK_MIN = 1;    // speak the first sentence immediately
-  const LATER_CHUNK_MIN = 200;  // then batch sentences to limit API calls
+  // Then batch sentences to limit API calls (Google's free voice quota is small).
+  const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, browser: 200 };
+  // After a quota/rate error, skip that provider for a while and use the browser voice.
+  const VOICE_COOLDOWN_MS = 10 * 60 * 1000;
 
   function startSpeech(onEnd) {
     if (!aiVoiceRef.current) return null;
@@ -211,7 +215,8 @@ export default function ChatPage() {
     if (!q || q.cancelled) return;
     q.buffer += text;
     for (;;) {
-      const cut = findSpeechCut(q.buffer, q.items.length === 0 ? FIRST_CHUNK_MIN : LATER_CHUNK_MIN);
+      const later = LATER_CHUNK_MIN[ttsProviderRef.current] ?? 200;
+      const cut = findSpeechCut(q.buffer, q.items.length === 0 ? FIRST_CHUNK_MIN : later);
       if (cut === -1) break;
       enqueueSpeech(q, q.buffer.slice(0, cut));
       q.buffer = q.buffer.slice(cut);
@@ -225,7 +230,9 @@ export default function ChatPage() {
   }
 
   function enqueueSpeech(q, raw) {
-    const provider = ttsProviderRef.current;
+    const chosen = ttsProviderRef.current;
+    const cooling = (voiceCooldownRef.current[chosen] ?? 0) > Date.now();
+    const provider = cooling ? 'browser' : chosen;
     let text = stripMarkdown(raw);
     if (!text.trim()) return;
     const budget = TTS_CHAR_BUDGET[provider] ?? 4000;
@@ -251,6 +258,10 @@ export default function ChatPage() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          voiceCooldownRef.current[provider] = Date.now() + VOICE_COOLDOWN_MS;
+          return { error: errData.error || 'Voice limit reached — using the browser voice.', fallback: true };
+        }
         return { error: errData.error || `Voice error ${res.status}` };
       }
       return { buffer: await res.arrayBuffer() };
@@ -278,7 +289,7 @@ export default function ChatPage() {
     return new Promise(async resolve => {
       q.resolveCurrent = resolve;
 
-      if (item.provider === 'browser') {
+      const speakWithBrowser = () => {
         const browserStyle = PERSONA_BROWSER_TTS[item.persona] ?? { rate: 1.05, pitch: 1.0 };
         const laughText = item.persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
         const segments = splitVoiceSegments(item.text)
@@ -294,8 +305,9 @@ export default function ChatPage() {
           if (i === segments.length - 1) { utt.onend = resolve; utt.onerror = resolve; }
           window.speechSynthesis.speak(utt);
         });
-        return;
-      }
+      };
+
+      if (item.provider === 'browser') return speakWithBrowser();
 
       const result = await item.audio;
       if (q.cancelled) return resolve();
@@ -305,7 +317,8 @@ export default function ChatPage() {
           setMicError(result.error);
           setTimeout(() => setMicError(''), 6000);
         }
-        return resolve();
+        // Out of quota: say this chunk with the browser voice instead of skipping it.
+        return result.fallback ? speakWithBrowser() : resolve();
       }
 
       try {
