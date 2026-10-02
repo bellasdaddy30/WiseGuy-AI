@@ -7,7 +7,7 @@ import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
 import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
-  stripMarkdown, truncateForTts, nextVoice,
+  stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
   BROWSER_SEGMENT_STYLE,
   GOOGLE_VOICES, ELEVENLABS_VOICES, PERSONA_BROWSER_TTS,
   TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY,
@@ -55,6 +55,7 @@ export default function ChatPage() {
   const audioRef       = useRef(null);
   const audioCtxRef    = useRef(null);
   const sourceNodeRef  = useRef(null);
+  const speechRef      = useRef(null);
   // Refs so async closures always see current values
   const voiceModeRef   = useRef(voiceMode);
   const aiVoiceRef     = useRef(aiVoice);
@@ -131,12 +132,14 @@ export default function ChatPage() {
   }
 
   function stopAudio() {
+    const q = speechRef.current;
+    if (q) { q.cancelled = true; q.resolveCurrent?.(); speechRef.current = null; }
     try { if (sourceNodeRef.current) { sourceNodeRef.current.stop(); sourceNodeRef.current = null; } } catch {}
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis?.cancel();
   }
 
-  // startListening is defined here so speakText can call it after audio ends
+  // startListening is defined here so the speech queue can call it after audio ends
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
@@ -188,77 +191,146 @@ export default function ChatPage() {
     }
   }
 
-  async function speakText(text, onEnd) {
-    if (!aiVoiceRef.current) { onEnd?.(); return; }
-    stopAudio();
+  // ---- Streaming speech -------------------------------------------------
+  // Each finished sentence is sent to the voice as soon as it streams in, so
+  // audio starts while the rest of the reply is still being written. Chunks
+  // are fetched in parallel but always played in order.
+  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000 };
+  const FIRST_CHUNK_MIN = 1;    // speak the first sentence immediately
+  const LATER_CHUNK_MIN = 200;  // then batch sentences to limit API calls
 
+  function startSpeech(onEnd) {
+    if (!aiVoiceRef.current) return null;
+    const q = { items: [], index: 0, buffer: '', spent: 0, finished: false,
+                cancelled: false, playing: false, errorShown: false, onEnd };
+    speechRef.current = q;
+    return q;
+  }
+
+  function feedSpeech(q, text, final = false) {
+    if (!q || q.cancelled) return;
+    q.buffer += text;
+    for (;;) {
+      const cut = findSpeechCut(q.buffer, q.items.length === 0 ? FIRST_CHUNK_MIN : LATER_CHUNK_MIN);
+      if (cut === -1) break;
+      enqueueSpeech(q, q.buffer.slice(0, cut));
+      q.buffer = q.buffer.slice(cut);
+    }
+    if (final) {
+      if (q.buffer.trim()) enqueueSpeech(q, q.buffer);
+      q.buffer = '';
+      q.finished = true;
+      pumpSpeech(q);
+    }
+  }
+
+  function enqueueSpeech(q, raw) {
     const provider = ttsProviderRef.current;
-    const raw      = stripMarkdown(text);
-    const clean    = provider === 'browser'    ? truncateForTts(raw, 500)
-                   : provider === 'elevenlabs' ? truncateForTts(raw, 1000)
-                   : raw;
+    let text = stripMarkdown(raw);
+    if (!text.trim()) return;
+    const budget = TTS_CHAR_BUDGET[provider] ?? 4000;
+    if (q.spent >= budget) return;
+    if (q.spent + text.length > budget) text = truncateForTts(text, budget - q.spent);
+    q.spent += text.length;
 
     const persona = personality?.persona ?? 'smartass';
+    const item = { provider, text, persona };
+    // Start fetching the audio now, while earlier chunks are still playing.
+    if (provider !== 'browser') item.audio = fetchSpeechAudio(text, provider, persona);
+    q.items.push(item);
+    pumpSpeech(q);
+  }
 
-    if (provider === 'browser') {
-      const browserStyle = PERSONA_BROWSER_TTS[persona] ?? { rate: 1.05, pitch: 1.0 };
-      const laughText = persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
-      const segments = splitVoiceSegments(clean)
-        .map(s => s.style === 'laugh' ? { ...s, text: laughText } : s)
-        .filter(s => s.text.trim());
-      if (segments.length === 0) { onEnd?.(); return; }
-      segments.forEach((seg, i) => {
-        const mod  = BROWSER_SEGMENT_STYLE[seg.style];
-        const utt  = new SpeechSynthesisUtterance(seg.text);
-        utt.rate   = Math.min(2, browserStyle.rate * mod.rate);
-        utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
-        utt.volume = mod.volume;
-        if (i === segments.length - 1) utt.onend = () => onEnd?.();
-        window.speechSynthesis.speak(utt);
-      });
-      return;
-    }
-
-    const voice = provider === 'google' ? googleVoiceRef.current : elVoiceRef.current;
-
+  async function fetchSpeechAudio(text, provider, persona) {
     try {
+      const voice = provider === 'google' ? googleVoiceRef.current : elVoiceRef.current;
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: toProviderTags(clean, provider, persona), provider, voice, persona }),
+        body: JSON.stringify({ text: toProviderTags(text, provider, persona), provider, voice, persona }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        const msg = errData.error || `Voice error ${res.status}`;
-        setMicError(msg);
-        setTimeout(() => setMicError(''), 6000);
-        onEnd?.();
+        return { error: errData.error || `Voice error ${res.status}` };
+      }
+      return { buffer: await res.arrayBuffer() };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  async function pumpSpeech(q) {
+    if (q.playing || q.cancelled) return;
+    q.playing = true;
+    while (!q.cancelled && q.index < q.items.length) {
+      await playSpeechItem(q, q.items[q.index++]);
+    }
+    q.playing = false;
+    if (!q.cancelled && q.finished && q.index >= q.items.length) {
+      const done = q.onEnd;
+      q.onEnd = null;
+      if (speechRef.current === q) speechRef.current = null;
+      done?.();
+    }
+  }
+
+  function playSpeechItem(q, item) {
+    return new Promise(async resolve => {
+      q.resolveCurrent = resolve;
+
+      if (item.provider === 'browser') {
+        const browserStyle = PERSONA_BROWSER_TTS[item.persona] ?? { rate: 1.05, pitch: 1.0 };
+        const laughText = item.persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
+        const segments = splitVoiceSegments(item.text)
+          .map(seg => seg.style === 'laugh' ? { ...seg, text: laughText } : seg)
+          .filter(seg => seg.text.trim());
+        if (segments.length === 0) return resolve();
+        segments.forEach((seg, i) => {
+          const mod  = BROWSER_SEGMENT_STYLE[seg.style] ?? BROWSER_SEGMENT_STYLE.normal;
+          const utt  = new SpeechSynthesisUtterance(seg.text);
+          utt.rate   = Math.min(2, browserStyle.rate * mod.rate);
+          utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
+          utt.volume = mod.volume;
+          if (i === segments.length - 1) { utt.onend = resolve; utt.onerror = resolve; }
+          window.speechSynthesis.speak(utt);
+        });
         return;
       }
 
-      const arrayBuffer = await res.arrayBuffer();
-      const ctx = audioCtxRef.current;
-
-      if (ctx) {
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        source.onended = () => onEnd?.();
-        sourceNodeRef.current = source;
-        source.start(0);
-      } else {
-        const blob  = new Blob([arrayBuffer]);
-        const url   = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.onended = () => { URL.revokeObjectURL(url); onEnd?.(); };
-        audioRef.current = audio;
-        audio.play().catch(e => { console.error('[tts fallback]', e.message); onEnd?.(); });
+      const result = await item.audio;
+      if (q.cancelled) return resolve();
+      if (result.error) {
+        if (!q.errorShown) {
+          q.errorShown = true;
+          setMicError(result.error);
+          setTimeout(() => setMicError(''), 6000);
+        }
+        return resolve();
       }
-    } catch (err) {
-      console.error('[tts]', err.message);
-      onEnd?.();
-    }
+
+      try {
+        const ctx = audioCtxRef.current;
+        if (ctx) {
+          const audioBuffer = await ctx.decodeAudioData(result.buffer);
+          if (q.cancelled) return resolve();
+          const source = ctx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(ctx.destination);
+          source.onended = resolve;
+          sourceNodeRef.current = source;
+          source.start(0);
+        } else {
+          const url   = URL.createObjectURL(new Blob([result.buffer]));
+          const audio = new Audio(url);
+          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+          audioRef.current = audio;
+          audio.play().catch(e => { console.error('[tts fallback]', e.message); resolve(); });
+        }
+      } catch (err) {
+        console.error('[tts]', err.message);
+        resolve();
+      }
+    });
   }
 
   const submitText = useCallback(async (text) => {
@@ -273,6 +345,9 @@ export default function ChatPage() {
     setLoading(true);
 
     let fullResponse = '';
+    // In hands-free mode, start listening again once the AI finishes speaking.
+    const afterSpeech = () => { if (handsFreeModeRef.current) startListening(); };
+    const speech = startSpeech(afterSpeech);
 
     try {
       const chatBody = {
@@ -300,6 +375,7 @@ export default function ChatPage() {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
+        feedSpeech(speech, chunk);
         setMessages(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = {
@@ -322,11 +398,10 @@ export default function ChatPage() {
       });
       setConvHistory(loadHistory());
 
-      // In hands-free mode, start listening again after AI finishes speaking
-      speakText(fullResponse, () => {
-        if (handsFreeModeRef.current) startListening();
-      });
+      if (speech) feedSpeech(speech, '', true);
+      else afterSpeech();
     } catch (err) {
+      if (speech) speech.cancelled = true;
       setMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = { role: 'assistant', content: err?.message || ERROR_REPLY };
