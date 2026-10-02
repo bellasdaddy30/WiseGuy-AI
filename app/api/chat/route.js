@@ -19,17 +19,13 @@ function creativityToTemp(c) {
 }
 
 export async function POST(request) {
-  const { messages, model: requestedModel, personality, provider: explicitProvider } = await request.json();
+  const { messages, model: requestedModel, personality } = await request.json();
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
   }
 
-  // Ollama models aren't in the static MODELS list — use the ID directly.
-  const isOllama = explicitProvider === 'ollama';
-  const model = isOllama
-    ? { id: requestedModel, provider: 'ollama' }
-    : getModel(requestedModel);
+  const model = getModel(requestedModel);
   const providerLabel = getProviderLabel(model.provider);
 
   let stream;

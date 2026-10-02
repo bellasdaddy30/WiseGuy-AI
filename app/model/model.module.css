@@ -110,34 +110,3 @@
   opacity: 1;
   cursor: default;
 }
-
-.ollamaNotice {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.ollamaCmd {
-  background: #111;
-  color: #b5e853;
-  font-family: monospace;
-  font-size: 0.82rem;
-  padding: 0.4rem 0.7rem;
-  border-radius: 5px;
-  margin: 0;
-  overflow-x: auto;
-  white-space: pre;
-}
-
-.ollamaTip {
-  font-size: 0.83rem;
-  color: var(--text-muted);
-}

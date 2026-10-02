@@ -88,8 +88,8 @@ export default function ChatPage() {
 
     try {
       const m  = localStorage.getItem(MODEL_KEY);
-      // Clear stale model selection if it's no longer the valid default
-      if (m && (MODELS.some(x => x.id === m) || m.startsWith('ollama::'))) {
+      // Clear stale model selection (retired model or old Ollama choice)
+      if (m && MODELS.some(x => x.id === m)) {
         setModel(m);
       } else if (m) {
         localStorage.removeItem(MODEL_KEY); // stale ID — fall back to new default
@@ -264,13 +264,11 @@ export default function ChatPage() {
     let fullResponse = '';
 
     try {
-      const isOllama = model.startsWith('ollama::');
       const chatBody = {
         messages: [...history, userMsg],
-        model: isOllama ? model.slice('ollama::'.length) : model,
+        model,
         personality,
       };
-      if (isOllama) chatBody.provider = 'ollama';
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -486,9 +484,7 @@ export default function ChatPage() {
           title="Conversation history"
         >☰</button>
         <span className={styles.modelName}>
-          {model.startsWith('ollama::')
-            ? model.slice('ollama::'.length)
-            : MODELS.find(m => m.id === model)?.name ?? model}
+          {MODELS.find(m => m.id === model)?.name ?? model}
         </span>
         </div>
 
