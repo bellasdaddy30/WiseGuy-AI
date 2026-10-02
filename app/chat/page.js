@@ -16,12 +16,14 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(MODEL_KEY);
       if (stored && MODELS.some(m => m.id === stored)) setModel(stored);
     } catch {}
+    inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -109,6 +111,7 @@ export default function ChatPage() {
 
       <form className={styles.inputBar} onSubmit={handleSubmit}>
         <textarea
+          ref={inputRef}
           className={styles.textarea}
           value={input}
           onChange={e => setInput(e.target.value)}
