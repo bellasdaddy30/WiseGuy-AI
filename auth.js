@@ -6,9 +6,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: '/account',
   },
-  callbacks: {
-    authorized({ auth }) {
-      return !!auth?.user;
-    },
-  },
 });
