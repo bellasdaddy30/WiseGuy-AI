@@ -1,34 +1,44 @@
 .message {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.25rem;
   max-width: 80%;
-  padding: 0.75rem 1rem;
-  border-radius: 12px;
-  line-height: 1.55;
+  padding: 0.875rem 1.1rem;
+  border-radius: var(--radius-lg);
+  line-height: 1.6;
 }
 
+/* ── User bubble ──────────────────────────────── */
 .user {
   align-self: flex-end;
-  background: var(--accent-dim);
-  border-bottom-right-radius: 3px;
+  background: linear-gradient(135deg, var(--accent-dim) 0%, #2e2070 100%);
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* ── Assistant bubble ─────────────────────────── */
 .assistant {
   align-self: flex-start;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 3px;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
 }
 
+/* ── Label ────────────────────────────────────── */
 .label {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
 }
 
+.user .label {
+  text-align: right;
+}
+
+/* ── Content ──────────────────────────────────── */
 .content {
   font-size: 0.95rem;
   color: var(--text);
@@ -36,20 +46,25 @@
   word-break: break-word;
 }
 
-@media (max-width: 600px) {
-  .message {
-    max-width: 92%;
-  }
+.user .content {
+  color: rgba(255, 255, 255, 0.94);
 }
 
+/* ── Tone variants ────────────────────────────── */
 .whisper {
   font-style: italic;
-  font-size: 0.88em;
-  opacity: 0.7;
+  font-size: 0.9em;
+  opacity: 0.72;
 }
 
 .shout {
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 600px) {
+  .message {
+    max-width: 92%;
+  }
 }

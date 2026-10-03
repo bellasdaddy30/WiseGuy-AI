@@ -6,15 +6,16 @@
 }
 
 .card {
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: 2rem;
   width: 100%;
   max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
 }
 
 .title {
@@ -37,20 +38,21 @@
   justify-content: center;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.75rem 1.25rem;
-  background: var(--surface);
+  padding: 0.8rem 1.25rem;
+  background: var(--surface-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--text);
   font-size: 0.95rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .googleBtn:hover {
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.07);
   border-color: var(--text-muted);
+  transform: translateY(-1px);
 }
 
 .googleIcon {

@@ -19,7 +19,7 @@ export default function Navbar() {
 
   return (
     <nav className={styles.nav}>
-      <Link href="/" className={styles.brand}>SmartAss AI</Link>
+      <Link href="/" className={styles.brand}>SmartAss<span> AI</span></Link>
       <ul className={styles.links}>
         {links.map(({ href, label }) => (
           <li key={href}>
