@@ -2,6 +2,10 @@ import { getModel } from '../../../lib/models';
 import { getClient, getProviderLabel, MissingKeyError } from '../../../lib/providers';
 import { buildSystemPrompt } from '../../../lib/personality';
 
+// Vercel: allow up to 60s for streaming AI responses (requires Pro plan;
+// Hobby plan caps at 10s which can cut off long responses).
+export const maxDuration = 60;
+
 // Turn provider errors into something a person can act on.
 function describeError(err, providerLabel) {
   if (err instanceof MissingKeyError) return err.message;

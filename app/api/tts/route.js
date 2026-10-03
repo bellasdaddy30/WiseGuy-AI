@@ -1,6 +1,8 @@
 import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG } from '../../../lib/tts';
 import { getApiKey } from '../../../lib/providers';
 
+export const maxDuration = 30;
+
 function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
   const buf  = new ArrayBuffer(44);
   const view = new DataView(buf);
