@@ -8,6 +8,7 @@ const links = [
   { href: '/chat',      label: 'Chat' },
   { href: '/model',     label: 'Model' },
   { href: '/customize', label: 'Customize' },
+  { href: '/audiobook', label: 'Audiobook' },
   { href: '/account',   label: 'Account' },
   { href: '/settings',  label: 'Settings' },
 ];
