@@ -18,11 +18,31 @@ function creativityToTemp(c) {
   return [0.4, 0.65, 0.85, 1.05, 1.3][(c ?? 3) - 1] ?? 0.85;
 }
 
+const MAX_MESSAGES    = 100;
+const MAX_MSG_CHARS   = 12000;
+const MAX_TOTAL_CHARS = 80000;
+
 export async function POST(request) {
-  const { messages, model: requestedModel, personality } = await request.json();
+  let body;
+  try { body = await request.json(); } catch {
+    return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+  const { messages, model: requestedModel, personality } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
+  }
+  if (messages.length > MAX_MESSAGES) {
+    return Response.json({ error: 'Too many messages in request.' }, { status: 400 });
+  }
+  const totalChars = messages.reduce((sum, m) => sum + (m?.content?.length ?? 0), 0);
+  if (totalChars > MAX_TOTAL_CHARS) {
+    return Response.json({ error: 'Message history too large.' }, { status: 400 });
+  }
+  for (const m of messages) {
+    if (typeof m?.content === 'string' && m.content.length > MAX_MSG_CHARS) {
+      return Response.json({ error: 'A single message exceeds the character limit.' }, { status: 400 });
+    }
   }
 
   const model = getModel(requestedModel);

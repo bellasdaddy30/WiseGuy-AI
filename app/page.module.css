@@ -247,6 +247,19 @@
   font-size: 0.95rem;
 }
 
+.personaChipPro {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #7c6af7, #a855f7);
+  color: #fff;
+  line-height: 1;
+  margin-left: 0.1rem;
+  align-self: center;
+}
+
 .sectionLink {
   display: inline-flex;
   align-items: center;

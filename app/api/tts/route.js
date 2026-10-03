@@ -230,11 +230,20 @@ async function orpheusTts(text, voice, persona) {
   return new Response(res.body, { headers: { 'Content-Type': 'audio/wav' } });
 }
 
+const MAX_TTS_CHARS = 4000;
+
 export async function POST(request) {
-  const { text, provider, voice, persona } = await request.json();
+  let body;
+  try { body = await request.json(); } catch {
+    return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+  const { text, provider, voice, persona } = body;
 
   if (!text?.trim()) {
     return Response.json({ error: 'No text provided.' }, { status: 400 });
+  }
+  if (text.length > MAX_TTS_CHARS) {
+    return Response.json({ error: `Text too long for TTS (${text.length} chars, max ${MAX_TTS_CHARS}).` }, { status: 400 });
   }
 
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);

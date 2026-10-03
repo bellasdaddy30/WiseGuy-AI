@@ -1,16 +1,55 @@
 'use client';
 
 import Link from 'next/link';
-import { PLANS, PLAN_FEATURES, FREE_PERSONAS, isPersonaPro, isTtsPro } from '../../lib/premium';
+import { PLANS, PLAN_FEATURES, isPersonaPro, isTtsPro } from '../../lib/premium';
 import { PERSONAS } from '../../lib/personality';
 import styles from './paid.module.css';
 
 const TTS_ENGINES = [
-  { id: 'browser',    label: 'Browser TTS',    pro: false },
-  { id: 'google',     label: 'Google TTS',      pro: false },
-  { id: 'elevenlabs', label: 'ElevenLabs TTS',  pro: true },
-  { id: 'openai',     label: 'OpenAI TTS',      pro: true },
-  { id: 'orpheus',    label: 'Orpheus TTS',      pro: true },
+  { id: 'browser',    label: 'Browser TTS',    desc: 'Free, built-in, no credits.', pro: false },
+  { id: 'google',     label: 'Google TTS',      desc: 'High quality. Uses Gemini key.', pro: false },
+  { id: 'elevenlabs', label: 'ElevenLabs',       desc: 'Most expressive. 1,000+ voices.', pro: true },
+  { id: 'openai',     label: 'OpenAI TTS',       desc: 'Very natural. gpt-4o-mini-tts.', pro: true },
+  { id: 'orpheus',    label: 'Orpheus TTS',       desc: 'Emotion-reactive. Via Groq.', pro: true },
+];
+
+const ROADMAP = [
+  {
+    icon: '🧠',
+    title: 'Persistent Memory',
+    desc: 'The AI remembers facts about you across every conversation. Tell it once — it never forgets.',
+    tag: 'Pro — Coming Soon',
+  },
+  {
+    icon: '🔄',
+    title: 'Sync Across Devices',
+    desc: 'Your conversation history follows you. Pick up on phone where you left off on desktop.',
+    tag: 'Pro — Coming Soon',
+  },
+  {
+    icon: '🎨',
+    title: 'Custom Persona Builder',
+    desc: 'Name it, describe it, set its voice and limits. Your persona, your rules.',
+    tag: 'Pro — Coming Soon',
+  },
+  {
+    icon: '📦',
+    title: 'Companion Pack',
+    desc: 'Unlock just Girlfriend + Boyfriend without full Pro. For when that\'s all you came for.',
+    tag: 'Add-on — Coming Soon',
+  },
+  {
+    icon: '📤',
+    title: 'Export Conversations',
+    desc: 'Download your full history as PDF or text. Yours to keep.',
+    tag: 'Pro — Coming Soon',
+  },
+  {
+    icon: '🔑',
+    title: 'API Access',
+    desc: 'Direct API access to the SmartAss AI persona engine. Build on top of it.',
+    tag: 'Power Plan — Coming Soon',
+  },
 ];
 
 export default function PaidPage() {
@@ -23,7 +62,7 @@ export default function PaidPage() {
         </p>
       </div>
 
-      {/* ── Pricing cards ──────────────────────────────────── */}
+      {/* ── Pricing cards ──────────────────────────────── */}
       <div className={styles.planGrid}>
         {Object.values(PLANS).map(plan => (
           <div
@@ -86,7 +125,10 @@ export default function PaidPage() {
         <div className={styles.ttsGrid}>
           {TTS_ENGINES.map(e => (
             <div key={e.id} className={`${styles.ttsItem} ${e.pro ? styles.ttsPro : ''}`}>
-              <span className={styles.ttsName}>{e.label}</span>
+              <div>
+                <div className={styles.ttsName}>{e.label}</div>
+                <div className={styles.ttsDesc}>{e.desc}</div>
+              </div>
               {e.pro
                 ? <span className={styles.proBadge}>PRO</span>
                 : <span className={styles.freeBadge}>FREE</span>
@@ -96,8 +138,25 @@ export default function PaidPage() {
         </div>
       </section>
 
+      {/* ── Roadmap ────────────────────────────────────────── */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>What's Coming</h2>
+        <div className={styles.roadmapGrid}>
+          {ROADMAP.map(r => (
+            <div key={r.title} className={styles.roadmapCard}>
+              <span className={styles.roadmapIcon}>{r.icon}</span>
+              <div>
+                <div className={styles.roadmapTitle}>{r.title}</div>
+                <div className={styles.roadmapDesc}>{r.desc}</div>
+                <div className={styles.roadmapTag}>{r.tag}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <p className={styles.note}>
-        Payments not yet live. Pro features are fully unlocked during development.
+        Payments not yet live. All Pro features are fully unlocked during development.
       </p>
     </main>
   );

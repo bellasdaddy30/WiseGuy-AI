@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { isPersonaPro } from '../lib/premium';
 import styles from './page.module.css';
 
 const features = [
@@ -45,7 +46,7 @@ export default function Home() {
       <section className={styles.hero}>
         <div className={styles.heroGlow} aria-hidden="true" />
         <div className={styles.heroContent}>
-          <span className={styles.eyebrow}>15 Distinct Personalities · Voice Built In</span>
+          <span className={styles.eyebrow}>15 Personalities · 5 Voice Engines · Multi-Model</span>
           <h1 className={styles.headline}>SmartAss AI</h1>
           <p className={styles.tagline}>
             The AI that doesn't pull its punches. No disclaimers, no corporate tone —
@@ -85,6 +86,7 @@ export default function Home() {
             <Link key={p.id} href="/customize" className={styles.personaChip}>
               <span className={styles.personaChipEmoji}>{p.emoji}</span>
               {p.label}
+              {isPersonaPro(p.id) && <span className={styles.personaChipPro}>PRO</span>}
             </Link>
           ))}
         </div>
