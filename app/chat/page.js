@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatMessage from '../../components/ChatMessage';
 import HistorySidebar from '../../components/HistorySidebar';
-import { MODELS, DEFAULT_MODEL } from '../../lib/models';
+import { MODELS, DEFAULT_MODEL, MODEL_KEY } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
 import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
@@ -12,15 +12,12 @@ import {
   GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES, PERSONA_BROWSER_TTS,
   TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
+  VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
 import styles from './chat.module.css';
 
-const ERROR_REPLY      = "The AI service isn't responding right now.";
-const MODEL_KEY        = 'smartass_model';
-const VOICE_MODE_KEY   = 'smartass_voice_mode';
-const AI_VOICE_KEY     = 'smartass_ai_voice';
-const HANDS_FREE_KEY   = 'smartass_hands_free';
+const ERROR_REPLY = "The AI service isn't responding right now.";
 
 const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai', 'orpheus'];
 const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI', orpheus: 'Orpheus' };
