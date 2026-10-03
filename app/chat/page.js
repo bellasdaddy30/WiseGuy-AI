@@ -138,7 +138,16 @@ export default function ChatPage() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       if (!audioCtxRef.current) audioCtxRef.current = new AC();
-      if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      // iOS Safari requires an actual sound played in the gesture handler to unlock
+      // the audio session — just creating/resuming the context isn't enough.
+      // A 1-sample silent buffer is inaudible but satisfies the requirement.
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
     } catch {}
   }
 
