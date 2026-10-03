@@ -9,6 +9,7 @@ const links = [
   { href: '/chat',      label: 'Chat' },
   { href: '/model',     label: 'Model' },
   { href: '/customize', label: 'Customize' },
+  { href: '/paid',      label: 'Pro' },
   { href: '/settings',  label: 'Settings' },
 ];
 

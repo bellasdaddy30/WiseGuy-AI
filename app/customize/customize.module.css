@@ -53,6 +53,12 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 
+.personaNameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .personaName {
   font-weight: 600;
   font-size: 0.95rem;

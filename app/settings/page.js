@@ -12,6 +12,8 @@ import {
 import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { clearHistory } from '../../lib/history';
 import { PERSONALITY_KEY } from '../../lib/personality';
+import { isTtsPro } from '../../lib/premium';
+import PremiumBadge from '../../components/PremiumBadge';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
@@ -192,7 +194,10 @@ export default function SettingsPage() {
               className={`${styles.providerCard} ${ttsProvider === p.id ? styles.active : ''}`}
               onClick={() => setTtsProvider(p.id)}
             >
-              <span className={styles.providerName}>{p.label}</span>
+              <span className={styles.providerNameRow}>
+                <span className={styles.providerName}>{p.label}</span>
+                {isTtsPro(p.id) && <PremiumBadge />}
+              </span>
               <span className={styles.providerDesc}>{p.desc}</span>
             </button>
           ))}

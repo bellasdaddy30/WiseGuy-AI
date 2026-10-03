@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { PERSONAS, DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
+import { isPersonaPro } from '../../lib/premium';
+import PremiumBadge from '../../components/PremiumBadge';
 import styles from './customize.module.css';
 
 const TONE_LABELS       = ['Chill', 'Relaxed', 'Balanced', 'Direct', 'Intense'];
@@ -46,7 +48,10 @@ export default function CustomizePage() {
               className={`${styles.personaCard} ${settings.persona === p.id ? styles.active : ''}`}
               onClick={() => update('persona', p.id)}
             >
-              <span className={styles.personaName}>{p.name}</span>
+              <span className={styles.personaNameRow}>
+                <span className={styles.personaName}>{p.name}</span>
+                {isPersonaPro(p.id) && <PremiumBadge />}
+              </span>
               <span className={styles.personaDesc}>{p.description}</span>
             </button>
           ))}

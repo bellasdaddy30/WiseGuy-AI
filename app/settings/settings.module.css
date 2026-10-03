@@ -61,6 +61,12 @@
   background: rgba(124, 106, 247, 0.08);
 }
 
+.providerNameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .providerName {
   font-size: 0.9rem;
   font-weight: 600;
