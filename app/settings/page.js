@@ -6,12 +6,12 @@ import {
   TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE,
   DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
-  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
+  GOOGLE_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { clearHistory } from '../../lib/history';
-import { PERSONALITY_KEY, DEFAULT_PERSONALITY } from '../../lib/personality';
+import { PERSONALITY_KEY } from '../../lib/personality';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
@@ -29,6 +29,13 @@ const VOICE_MODES = [
   { id: 'handsfree', label: 'Hands Free',   desc: 'AI listens again after each response.' },
 ];
 
+const CAT_LABEL = {
+  professional: 'Professional',
+  premade:      'Premade',
+  cloned:       'Cloned',
+  generated:    'Generated',
+};
+
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v !== null ? v : fallback; } catch { return fallback; }
 }
@@ -44,11 +51,15 @@ export default function SettingsPage() {
   const [orVoice,       setOrVoice]       = useState(DEFAULT_ORPHEUS_VOICE);
   const [aiVoice,       setAiVoice]       = useState(true);
   const [voiceMode,     setVoiceMode]     = useState('off');
-  const [handsFree,     setHandsFree]     = useState(false);
   const [clearConfirm,  setClearConfirm]  = useState(false);
   const [cleared,       setCleared]       = useState(false);
   const [resetConfirm,  setResetConfirm]  = useState(false);
   const [saved,         setSaved]         = useState(false);
+
+  // ElevenLabs dynamic voice list
+  const [elVoices,      setElVoices]      = useState(null); // null = not yet loaded
+  const [elLoading,     setElLoading]     = useState(false);
+  const [elError,       setElError]       = useState('');
 
   useEffect(() => {
     setTtsProvider(load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER));
@@ -58,9 +69,34 @@ export default function SettingsPage() {
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
-    setHandsFree(hf);
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
   }, []);
+
+  // Fetch ElevenLabs voices when ElevenLabs is selected
+  useEffect(() => {
+    if (ttsProvider !== 'elevenlabs' || elVoices !== null) return;
+    setElLoading(true);
+    setElError('');
+    fetch('/api/elevenlabs-voices')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.voices?.length) {
+          setElError('No voices returned — check your ElevenLabs API key.');
+          setElVoices([]);
+        } else {
+          setElVoices(data.voices);
+          // If current saved voice isn't in the list, reset to first available
+          if (!data.voices.some(v => v.id === elVoice)) {
+            setElVoice(data.voices[0].id);
+          }
+        }
+      })
+      .catch(() => {
+        setElError('Could not load voices. Check your connection.');
+        setElVoices([]);
+      })
+      .finally(() => setElLoading(false));
+  }, [ttsProvider]);
 
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
@@ -111,15 +147,34 @@ export default function SettingsPage() {
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
     setAiVoice(true);
     setVoiceMode('off');
-    setHandsFree(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
-  const voiceMap = { google: googleVoice, elevenlabs: elVoice, openai: oaVoice, orpheus: orVoice };
-  const voiceSetters = { google: setGoogleVoice, elevenlabs: setElVoice, openai: setOaVoice, orpheus: setOrVoice };
-  const voiceLists   = { google: GOOGLE_VOICES, elevenlabs: ELEVENLABS_VOICES, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
-  const voiceKeys    = { google: TTS_VOICE_GOOGLE_KEY, elevenlabs: TTS_VOICE_ELEVENLABS_KEY, openai: TTS_VOICE_OPENAI_KEY, orpheus: TTS_VOICE_ORPHEUS_KEY };
+  const voiceMap     = { google: googleVoice, openai: oaVoice, orpheus: orVoice };
+  const voiceSetters = { google: setGoogleVoice, openai: setOaVoice, orpheus: setOrVoice };
+  const voiceLists   = { google: GOOGLE_VOICES, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
+
+  // Build grouped <optgroup> elements for ElevenLabs
+  function renderElVoiceOptions() {
+    if (!elVoices?.length) return null;
+    const groups = {};
+    for (const v of elVoices) {
+      const cat = v.category ?? 'premade';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(v);
+    }
+    const catOrder = ['professional', 'premade', 'cloned', 'generated'];
+    return catOrder
+      .filter(c => groups[c]?.length)
+      .map(c => (
+        <optgroup key={c} label={CAT_LABEL[c] ?? c}>
+          {groups[c].map(v => (
+            <option key={v.id} value={v.id}>{v.name}</option>
+          ))}
+        </optgroup>
+      ));
+  }
 
   return (
     <main className={styles.page}>
@@ -143,20 +198,38 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {ttsProvider !== 'browser' && voiceLists[ttsProvider] && (
+        {/* Voice picker for non-browser providers */}
+        {ttsProvider !== 'browser' && (
           <div className={styles.voiceRow}>
             <label className={styles.voiceLabel}>
               {TTS_PROVIDERS.find(p => p.id === ttsProvider)?.label} Voice
             </label>
-            <select
-              className={styles.select}
-              value={voiceMap[ttsProvider]}
-              onChange={e => voiceSetters[ttsProvider](e.target.value)}
-            >
-              {voiceLists[ttsProvider].map(v => (
-                <option key={v.id} value={v.id}>{v.name}</option>
-              ))}
-            </select>
+
+            {ttsProvider === 'elevenlabs' ? (
+              elLoading ? (
+                <span className={styles.voiceLoading}>Loading voices…</span>
+              ) : elError ? (
+                <span className={styles.voiceError}>{elError}</span>
+              ) : (
+                <select
+                  className={styles.select}
+                  value={elVoice}
+                  onChange={e => setElVoice(e.target.value)}
+                >
+                  {renderElVoiceOptions()}
+                </select>
+              )
+            ) : (
+              <select
+                className={styles.select}
+                value={voiceMap[ttsProvider]}
+                onChange={e => voiceSetters[ttsProvider](e.target.value)}
+              >
+                {voiceLists[ttsProvider]?.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         )}
       </section>
