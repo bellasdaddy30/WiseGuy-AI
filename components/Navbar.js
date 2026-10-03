@@ -18,14 +18,15 @@ export default function Navbar() {
   const { data: session } = useSession();
 
   return (
-    <nav className={styles.nav}>
+    <nav className={styles.nav} suppressHydrationWarning>
       <Link href="/" className={styles.brand}>SmartAss<span> AI</span></Link>
-      <ul className={styles.links}>
+      <ul className={styles.links} suppressHydrationWarning>
         {links.map(({ href, label }) => (
-          <li key={href}>
+          <li key={href} suppressHydrationWarning>
             <Link
               href={href}
               className={`${styles.link} ${pathname === href ? styles.active : ''}`}
+              suppressHydrationWarning
             >
               {label}
             </Link>
