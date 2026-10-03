@@ -12,6 +12,7 @@ import {
 import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { clearHistory } from '../../lib/history';
 import { PERSONALITY_KEY } from '../../lib/personality';
+import { getMemory, addMemoryItem, removeMemoryItem, clearMemory, MEMORY_KEY } from '../../lib/memory';
 import { isTtsPro } from '../../lib/premium';
 import PremiumBadge from '../../components/PremiumBadge';
 import styles from './settings.module.css';
@@ -58,12 +59,18 @@ export default function SettingsPage() {
   const [resetConfirm,  setResetConfirm]  = useState(false);
   const [saved,         setSaved]         = useState(false);
 
+  // Memory
+  const [memoryItems,   setMemoryItems]   = useState([]);
+  const [memInput,      setMemInput]      = useState('');
+  const [memCleared,    setMemCleared]    = useState(false);
+
   // ElevenLabs dynamic voice list
   const [elVoices,      setElVoices]      = useState(null); // null = not yet loaded
   const [elLoading,     setElLoading]     = useState(false);
   const [elError,       setElError]       = useState('');
 
   useEffect(() => {
+    setMemoryItems(getMemory());
     setTtsProvider(load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER));
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
@@ -151,6 +158,24 @@ export default function SettingsPage() {
     setVoiceMode('off');
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  }
+
+  function handleAddMemory(e) {
+    e.preventDefault();
+    if (!memInput.trim()) return;
+    setMemoryItems(addMemoryItem(memInput));
+    setMemInput('');
+  }
+
+  function handleRemoveMemory(i) {
+    setMemoryItems(removeMemoryItem(i));
+  }
+
+  function handleClearMemory() {
+    clearMemory();
+    setMemoryItems([]);
+    setMemCleared(true);
+    setTimeout(() => setMemCleared(false), 3000);
   }
 
   const voiceMap     = { google: googleVoice, openai: oaVoice, orpheus: orVoice };
@@ -276,6 +301,50 @@ export default function SettingsPage() {
       <button className={`${styles.saveBtn} ${saved ? styles.saveBtnDone : ''}`} onClick={handleSave}>
         {saved ? '✓ Saved' : 'Save Settings'}
       </button>
+
+      {/* ── MEMORY ───────────────────────────────────────────── */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionLabel}>AI Memory</h2>
+        <p className={styles.sectionDesc}>
+          Facts the AI remembers about you across conversations.
+          These are injected into every chat — keep them short and relevant.
+        </p>
+
+        {memoryItems.length === 0 ? (
+          <p className={styles.memEmpty}>No memory items yet.</p>
+        ) : (
+          <ul className={styles.memList}>
+            {memoryItems.map((item, i) => (
+              <li key={i} className={styles.memItem}>
+                <span className={styles.memText}>{item}</span>
+                <button
+                  className={styles.memDelete}
+                  onClick={() => handleRemoveMemory(i)}
+                  aria-label="Remove"
+                >✕</button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form className={styles.memForm} onSubmit={handleAddMemory}>
+          <input
+            className={styles.memInput}
+            type="text"
+            placeholder='e.g. "My name is Chris" or "I'm building a startup"'
+            value={memInput}
+            onChange={e => setMemInput(e.target.value)}
+            maxLength={200}
+          />
+          <button className={styles.memAddBtn} type="submit">Add</button>
+        </form>
+
+        {memoryItems.length > 0 && (
+          <button className={styles.memClearBtn} onClick={handleClearMemory}>
+            {memCleared ? '✓ Cleared' : 'Clear all memory'}
+          </button>
+        )}
+      </section>
 
       {/* ── DATA ─────────────────────────────────────────────── */}
       <section className={styles.section}>

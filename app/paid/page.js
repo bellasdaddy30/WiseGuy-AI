@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { PLANS, PLAN_FEATURES, isPersonaPro, isTtsPro } from '../../lib/premium';
+import { PLANS, PLAN_FEATURES, isPersonaPro, isPersonaCompanion, isTtsPro } from '../../lib/premium';
 import { PERSONAS } from '../../lib/personality';
 import styles from './paid.module.css';
 
@@ -67,9 +67,10 @@ export default function PaidPage() {
         {Object.values(PLANS).map(plan => (
           <div
             key={plan.id}
-            className={`${styles.planCard} ${plan.highlight ? styles.planHighlight : ''}`}
+            className={`${styles.planCard} ${plan.highlight ? styles.planHighlight : ''} ${plan.addon ? styles.planAddon : ''}`}
           >
             {plan.highlight && <div className={styles.planPill}>Most Popular</div>}
+            {plan.addon && <div className={styles.planPill} style={{ background: '#e879a0' }}>Add-on</div>}
             <div className={styles.planName}>{plan.label}</div>
             <div className={styles.planPriceRow}>
               <span className={styles.planPrice}>{plan.price}</span>
@@ -102,14 +103,17 @@ export default function PaidPage() {
         <h2 className={styles.sectionTitle}>Personas</h2>
         <div className={styles.personaGrid}>
           {PERSONAS.map(p => {
-            const pro = isPersonaPro(p.id);
+            const pro       = isPersonaPro(p.id);
+            const companion = isPersonaCompanion(p.id);
             return (
-              <div key={p.id} className={`${styles.personaItem} ${pro ? styles.personaPro : ''}`}>
+              <div key={p.id} className={`${styles.personaItem} ${pro ? styles.personaPro : ''} ${companion ? styles.personaCompanion : ''}`}>
                 <div className={styles.personaItemHeader}>
                   <span className={styles.personaItemName}>{p.name}</span>
-                  {pro
-                    ? <span className={styles.proBadge}>PRO</span>
-                    : <span className={styles.freeBadge}>FREE</span>
+                  {companion
+                    ? <span className={styles.companionBadge}>ADD-ON</span>
+                    : pro
+                      ? <span className={styles.proBadge}>PRO</span>
+                      : <span className={styles.freeBadge}>FREE</span>
                   }
                 </div>
                 <span className={styles.personaItemDesc}>{p.description}</span>

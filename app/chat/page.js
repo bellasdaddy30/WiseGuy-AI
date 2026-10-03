@@ -5,6 +5,7 @@ import ChatMessage from '../../components/ChatMessage';
 import HistorySidebar from '../../components/HistorySidebar';
 import { MODELS, DEFAULT_MODEL, MODEL_KEY } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
+import { getMemory } from '../../lib/memory';
 import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
   stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
@@ -386,6 +387,7 @@ export default function ChatPage() {
         messages: [...history, userMsg],
         model,
         personality,
+        memory: getMemory(),
       };
 
       const res = await fetch('/api/chat', {
@@ -607,56 +609,19 @@ export default function ChatPage() {
       {micError && <div className={styles.micError}>{micError}</div>}
 
       <div className={styles.controlsBar}>
-        <div className={styles.leftControls}>
         <button
           className={styles.historyBtn}
           onClick={() => setSidebarOpen(o => !o)}
           title="Conversation history"
-        >☰</button>
-        <span className={styles.modelName}>
-          {MODELS.find(m => m.id === model)?.name ?? model}
-        </span>
-        </div>
+        >☰ History</button>
 
-        <div className={styles.voiceToggles}>
-          <button
-            className={`${styles.ctrlBtn} ${voiceMode === 'auto' ? styles.ctrlActive : ''}`}
-            onClick={toggleVoiceMode}
-            title={voiceMode === 'review' ? 'Review: fills field, you send manually' : 'Auto: sends when you stop talking'}
-          >
-            {voiceMode === 'review' ? 'Review' : 'Auto'}
-          </button>
-
-          <button
-            className={`${styles.ctrlBtn} ${handsFree ? styles.ctrlHandsFree : ''}`}
-            onClick={toggleHandsFree}
-            title="Hands-Free: AI talks back then listens automatically"
-          >
-            {handsFree ? '🎙️ Live' : '🎙️'}
-          </button>
-
-          <button
-            className={`${styles.ctrlBtn} ${ttsProvider !== 'browser' ? styles.ctrlActive : ''}`}
-            onClick={cycleProvider}
-            title="Cycle voice provider"
-          >
-            {TTS_LABELS[ttsProvider]}
-          </button>
-
-          {currentVoiceName && (
-            <button className={styles.ctrlBtn} onClick={cycleVoice} title="Cycle voice">
-              {currentVoiceName}
-            </button>
-          )}
-
-          <button
-            className={`${styles.ctrlBtn} ${aiVoice ? styles.ctrlActive : ''}`}
-            onClick={toggleAiVoice}
-            title={aiVoice ? 'AI voice on' : 'AI voice off'}
-          >
-            {aiVoice ? '🔊' : '🔇'}
-          </button>
-        </div>
+        <button
+          className={`${styles.ctrlBtn} ${aiVoice ? styles.ctrlActive : ''}`}
+          onClick={toggleAiVoice}
+          title={aiVoice ? 'AI voice on — tap to mute' : 'AI voice off — tap to unmute'}
+        >
+          {aiVoice ? '🔊' : '🔇'}
+        </button>
       </div>
 
       <form className={styles.inputBar} onSubmit={handleSubmit}>

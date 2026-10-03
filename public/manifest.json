@@ -1,0 +1,39 @@
+{
+  "name": "SmartAss AI",
+  "short_name": "SmartAss",
+  "description": "The AI that doesn't pull its punches. 15 personalities, voice built in.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08080c",
+  "theme_color": "#7c6af7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "url": "/chat",
+      "description": "Start a conversation"
+    },
+    {
+      "name": "Personas",
+      "short_name": "Personas",
+      "url": "/customize",
+      "description": "Switch your persona"
+    }
+  ],
+  "categories": ["productivity", "entertainment"]
+}

@@ -31,7 +31,7 @@ export async function POST(request) {
   try { body = await request.json(); } catch {
     return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   }
-  const { messages, model: requestedModel, personality } = body;
+  const { messages, model: requestedModel, personality, memory } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
@@ -57,7 +57,7 @@ export async function POST(request) {
     const client = getClient(model.provider);
     const reqBody = {
       model: model.id,
-      messages: [{ role: 'system', content: buildSystemPrompt(personality) }, ...messages],
+      messages: [{ role: 'system', content: buildSystemPrompt(personality, Array.isArray(memory) ? memory : []) }, ...messages],
       stream: true,
       temperature: creativityToTemp(personality?.creativity),
     };
