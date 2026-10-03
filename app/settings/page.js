@@ -331,7 +331,7 @@ export default function SettingsPage() {
           <input
             className={styles.memInput}
             type="text"
-            placeholder='e.g. "My name is Chris" or "I'm building a startup"'
+            placeholder={`e.g. "My name is Chris" or "I'm building a startup"`}
             value={memInput}
             onChange={e => setMemInput(e.target.value)}
             maxLength={200}
