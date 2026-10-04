@@ -161,51 +161,68 @@ export default function ChatPage() {
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setMicError('Voice input needs HTTPS. Works when the app is deployed.');
+      setMicError('Voice input not supported in this browser.');
       setTimeout(() => setMicError(''), 4000);
       return;
     }
     if (loadingRef.current) return;
-
     stopAudio();
     setMicError('');
 
-    const rec = new SR();
-    rec.continuous     = false;
-    rec.interimResults = true;
-    rec.lang           = 'en-US';
-    transcriptRef.current = '';
+    function beginRecognition() {
+      const rec = new SR();
+      rec.continuous     = false;
+      rec.interimResults = true;
+      rec.lang           = 'en-US';
+      transcriptRef.current = '';
 
-    rec.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join('');
-      transcriptRef.current = t;
-      setInput(t);
-    };
-    rec.onend = () => {
-      setListening(false);
-      const final = transcriptRef.current.trim();
-      if (final && (voiceModeRef.current === 'auto' || handsFreeModeRef.current)) {
-        submitText(final);
-      }
-    };
-    rec.onerror = (e) => {
-      setListening(false);
-      if (e.error === 'not-allowed') {
-        setMicError('Microphone access denied. Check browser permissions.');
-        setTimeout(() => setMicError(''), 4000);
-      } else if (e.error === 'network') {
-        setMicError('Voice input requires HTTPS. Works when deployed.');
-        setTimeout(() => setMicError(''), 4000);
-      }
-    };
+      rec.onresult = (e) => {
+        const t = Array.from(e.results).map(r => r[0].transcript).join('');
+        transcriptRef.current = t;
+        setInput(t);
+      };
+      rec.onend = () => {
+        setListening(false);
+        const final = transcriptRef.current.trim();
+        if (final && (voiceModeRef.current === 'auto' || handsFreeModeRef.current)) {
+          submitText(final);
+        }
+      };
+      rec.onerror = (e) => {
+        setListening(false);
+        if (e.error === 'not-allowed') {
+          setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
+          setTimeout(() => setMicError(''), 6000);
+        } else if (e.error === 'network') {
+          setMicError('Voice requires HTTPS — use the deployed URL, not localhost.');
+          setTimeout(() => setMicError(''), 4000);
+        }
+      };
 
-    try {
-      rec.start();
-      recognitionRef.current = rec;
-      setListening(true);
-    } catch {
-      setMicError('Voice input not available in this browser.');
-      setTimeout(() => setMicError(''), 4000);
+      try {
+        rec.start();
+        recognitionRef.current = rec;
+        setListening(true);
+      } catch {
+        setMicError('Voice input not available in this browser.');
+        setTimeout(() => setMicError(''), 4000);
+      }
+    }
+
+    // iOS Safari requires getUserMedia to be called first to trigger the
+    // mic permission dialog — SpeechRecognition alone silently fails without it.
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          stream.getTracks().forEach(t => t.stop()); // release immediately; SR manages its own stream
+          beginRecognition();
+        })
+        .catch(() => {
+          setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
+          setTimeout(() => setMicError(''), 6000);
+        });
+    } else {
+      beginRecognition();
     }
   }
 
