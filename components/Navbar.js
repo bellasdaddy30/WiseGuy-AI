@@ -9,6 +9,7 @@ const links = [
   { href: '/model',     label: 'Model' },
   { href: '/customize', label: 'Customize' },
   { href: '/audiobook', label: 'Audiobook' },
+  { href: '/music',     label: 'Music' },
   { href: '/account',   label: 'Account' },
   { href: '/settings',  label: 'Settings' },
 ];
