@@ -16,7 +16,7 @@ export default function ChatMessage({ role, content }) {
   const isUser = role === 'user';
   return (
     <div className={`${styles.message} ${isUser ? styles.user : styles.assistant}`}>
-      <span className={styles.label}>{isUser ? 'You' : 'SmartAss'}</span>
+      <span className={styles.label}>{isUser ? 'You' : 'WiseGuy'}</span>
       <p className={styles.content}>{isUser ? content : renderAssistant(content)}</p>
     </div>
   );

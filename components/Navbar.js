@@ -2,24 +2,24 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import styles from './Navbar.module.css';
 
 const links = [
   { href: '/chat',      label: 'Chat' },
   { href: '/model',     label: 'Model' },
-  { href: '/customize', label: 'Customize' },
+  { href: '/customize', label: 'Personas' },
   { href: '/paid',      label: 'Pro' },
   { href: '/settings',  label: 'Settings' },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
 
   return (
     <nav className={styles.nav} suppressHydrationWarning>
-      <Link href="/" className={styles.brand}>SmartAss<span> AI</span></Link>
+      <Link href="/" className={styles.brand}>
+        <span className={styles.brandWise}>Wise</span><span className={styles.brandGuy}>Guy</span><span className={styles.brandAI}> AI</span>
+      </Link>
       <ul className={styles.links} suppressHydrationWarning>
         {links.map(({ href, label }) => (
           <li key={href} suppressHydrationWarning>
@@ -33,23 +33,6 @@ export default function Navbar() {
           </li>
         ))}
       </ul>
-      <Link
-        href="/account"
-        className={`${styles.accountBtn} ${pathname === '/account' ? styles.active : ''}`}
-        title={session?.user?.name ?? 'Account'}
-      >
-        {session?.user?.image ? (
-          <img
-            src={session.user.image}
-            alt={session.user.name ?? 'Account'}
-            className={styles.avatar}
-          />
-        ) : (
-          <span className={styles.avatarPlaceholder}>
-            {session?.user?.name?.[0]?.toUpperCase() ?? '?'}
-          </span>
-        )}
-      </Link>
     </nav>
   );
 }

@@ -257,7 +257,7 @@ export default function ChatPage() {
     if (q.spent + text.length > budget) text = truncateForTts(text, budget - q.spent);
     q.spent += text.length;
 
-    const persona = personality?.persona ?? 'smartass';
+    const persona = personality?.persona ?? 'wiseguy';
     const item = { provider, text, persona };
     // Start fetching the audio now, while earlier chunks are still playing.
     if (provider !== 'browser') item.audio = fetchSpeechAudio(text, provider, persona);

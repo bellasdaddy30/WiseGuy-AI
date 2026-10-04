@@ -178,7 +178,7 @@ async function openAiTts(text, voice, persona) {
 // Tags like <laugh>, <sigh>, <chuckle> trigger real vocal reactions.
 function injectOrpheusEmotions(text, persona) {
   const rules = {
-    smartass:       { tag: '<chuckle>', every: 3 },
+    wiseguy:        { tag: '<chuckle>', every: 3 },
     roast_master:   { tag: '<laugh>',   every: 2 },
     hype_man:       { tag: '<laugh>',   every: 2 },
     unfiltered:     { tag: '<sigh>',    every: 3 },

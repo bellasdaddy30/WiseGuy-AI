@@ -13,50 +13,12 @@ const TTS_ENGINES = [
   { id: 'orpheus',    label: 'Orpheus TTS',       desc: 'Emotion-reactive. Via Groq.', pro: true },
 ];
 
-const ROADMAP = [
-  {
-    icon: '🧠',
-    title: 'Persistent Memory',
-    desc: 'The AI remembers facts about you across every conversation. Tell it once — it never forgets.',
-    tag: 'Pro — Coming Soon',
-  },
-  {
-    icon: '🔄',
-    title: 'Sync Across Devices',
-    desc: 'Your conversation history follows you. Pick up on phone where you left off on desktop.',
-    tag: 'Pro — Coming Soon',
-  },
-  {
-    icon: '🎨',
-    title: 'Custom Persona Builder',
-    desc: 'Name it, describe it, set its voice and limits. Your persona, your rules.',
-    tag: 'Pro — Coming Soon',
-  },
-  {
-    icon: '📦',
-    title: 'Companion Pack',
-    desc: 'Unlock just Girlfriend + Boyfriend without full Pro. For when that\'s all you came for.',
-    tag: 'Add-on — Coming Soon',
-  },
-  {
-    icon: '📤',
-    title: 'Export Conversations',
-    desc: 'Download your full history as PDF or text. Yours to keep.',
-    tag: 'Pro — Coming Soon',
-  },
-  {
-    icon: '🔑',
-    title: 'API Access',
-    desc: 'Direct API access to the SmartAss AI persona engine. Build on top of it.',
-    tag: 'Power Plan — Coming Soon',
-  },
-];
-
 export default function PaidPage() {
   return (
     <main className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Upgrade SmartAss AI</h1>
+        <span className={styles.betaBadge}>Beta — All Features Free</span>
+        <h1 className={styles.title}>Upgrade WiseGuy AI</h1>
         <p className={styles.subtitle}>
           The full experience — every persona, every voice engine, no limits.
         </p>
@@ -90,9 +52,9 @@ export default function PaidPage() {
                 {plan.cta}
               </Link>
             ) : (
-              <button className={styles.ctaPrimary} disabled>
-                {plan.cta} — Coming Soon
-              </button>
+              <Link href="/chat" className={styles.ctaPrimary}>
+                Try Free During Beta →
+              </Link>
             )}
           </div>
         ))}
@@ -100,7 +62,7 @@ export default function PaidPage() {
 
       {/* ── Persona breakdown ──────────────────────────────── */}
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Personas</h2>
+        <h2 className={styles.sectionTitle}>All Personas</h2>
         <div className={styles.personaGrid}>
           {PERSONAS.map(p => {
             const pro       = isPersonaPro(p.id);
@@ -142,25 +104,8 @@ export default function PaidPage() {
         </div>
       </section>
 
-      {/* ── Roadmap ────────────────────────────────────────── */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>What's Coming</h2>
-        <div className={styles.roadmapGrid}>
-          {ROADMAP.map(r => (
-            <div key={r.title} className={styles.roadmapCard}>
-              <span className={styles.roadmapIcon}>{r.icon}</span>
-              <div>
-                <div className={styles.roadmapTitle}>{r.title}</div>
-                <div className={styles.roadmapDesc}>{r.desc}</div>
-                <div className={styles.roadmapTag}>{r.tag}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       <p className={styles.note}>
-        Payments not yet live. All Pro features are fully unlocked during development.
+        Billing coming soon. Everything is unlocked during beta — enjoy it.
       </p>
     </main>
   );

@@ -37,7 +37,7 @@ export default function CustomizePage() {
   return (
     <main>
       <h1 className={styles.heading}>Customize</h1>
-      <p className={styles.sub}>Shape how SmartAss AI talks to you. Saved to this browser.</p>
+      <p className={styles.sub}>Shape how WiseGuy AI talks to you. Saved to this browser.</p>
 
       <section className={styles.section}>
         <h2 className={styles.sectionLabel}>Persona</h2>

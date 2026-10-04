@@ -1,4 +1,4 @@
-const CACHE = 'smartass-v1';
+const CACHE = 'wiseguy-v1';
 
 // Cache the shell pages so the app loads offline
 const PRECACHE = ['/', '/chat', '/customize', '/model', '/settings', '/paid', '/account'];

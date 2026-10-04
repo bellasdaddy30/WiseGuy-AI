@@ -5,13 +5,13 @@ import PWARegister from '../components/PWARegister';
 import { auth } from '../auth';
 
 export const metadata = {
-  title: 'SmartAss AI',
-  description: 'The AI that doesn\'t pull its punches. 15 personalities, voice built in.',
+  title: 'WiseGuy AI',
+  description: '15 personalities, real talk, no corporate tone. The AI with an attitude.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'SmartAss AI',
+    title: 'WiseGuy AI',
   },
   formatDetection: { telephone: false },
 };

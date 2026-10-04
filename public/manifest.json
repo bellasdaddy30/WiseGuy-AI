@@ -1,7 +1,7 @@
 {
-  "name": "SmartAss AI",
-  "short_name": "SmartAss",
-  "description": "The AI that doesn't pull its punches. 15 personalities, voice built in.",
+  "name": "WiseGuy AI",
+  "short_name": "WiseGuy",
+  "description": "15 personalities, real talk, no corporate tone. The AI with an attitude.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#08080c",

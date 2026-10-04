@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { MODELS, DEFAULT_MODEL } from '../../lib/models';
 import styles from './model.module.css';
 
-const STORAGE_KEY = 'smartass_model';
+const STORAGE_KEY = 'wiseguy_model';
 
 const PROVIDER_LABELS = {
   openai: 'OpenAI',

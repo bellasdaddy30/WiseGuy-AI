@@ -6,7 +6,7 @@ const features = [
   {
     icon: '🎭',
     title: '15 Distinct Personalities',
-    desc: 'SmartAss, Unfiltered, Evil Genius, Philosopher, Coach, and ten more — each with real differences in how they talk, curse, and think.',
+    desc: 'WiseGuy, Unfiltered, Evil Genius, Philosopher, Coach, and ten more — each with real differences in how they talk, think, and hit.',
   },
   {
     icon: '🎙️',
@@ -16,26 +16,26 @@ const features = [
   {
     icon: '🧠',
     title: 'Multi-Model',
-    desc: 'GPT-4o, Claude, Gemini, and more. Swap the brain running under the hood without losing your persona settings.',
+    desc: 'GPT-4o, Gemini, Groq, and more. Swap the brain without losing your persona settings.',
   },
 ];
 
 const personas = [
-  { id: 'smartass',       label: 'SmartAss',       emoji: '😏' },
-  { id: 'unfiltered',     label: 'Unfiltered',      emoji: '🔥' },
-  { id: 'roast_master',   label: 'Roast Master',    emoji: '🎤' },
-  { id: 'hype_man',       label: 'Hype Man',        emoji: '🙌' },
-  { id: 'evil_genius',    label: 'Evil Genius',     emoji: '🧬' },
-  { id: 'philosopher',    label: 'Philosopher',     emoji: '🪐' },
-  { id: 'therapist',      label: 'Therapist',       emoji: '🛋️' },
-  { id: 'coach',          label: 'Coach',           emoji: '💪' },
-  { id: 'street_smart',   label: 'Street Smart',    emoji: '🌆' },
-  { id: 'conspiracy_nut', label: 'Conspiracy Nut',  emoji: '👁️' },
-  { id: 'comedian',       label: 'Comedian',        emoji: '😂' },
-  { id: 'pirate',         label: 'Pirate',          emoji: '☠️' },
-  { id: 'girlfriend',     label: 'Girlfriend',      emoji: '💕' },
-  { id: 'boyfriend',      label: 'Boyfriend',       emoji: '💙' },
-  { id: 'professional',   label: 'Professional',    emoji: '💼' },
+  { id: 'wiseguy',       label: 'WiseGuy',        emoji: '😏' },
+  { id: 'unfiltered',    label: 'Unfiltered',      emoji: '🔥' },
+  { id: 'roast_master',  label: 'Roast Master',    emoji: '🎤' },
+  { id: 'hype_man',      label: 'Hype Man',        emoji: '🙌' },
+  { id: 'evil_genius',   label: 'Evil Genius',     emoji: '🧬' },
+  { id: 'philosopher',   label: 'Philosopher',     emoji: '🪐' },
+  { id: 'therapist',     label: 'Therapist',       emoji: '🛋️' },
+  { id: 'coach',         label: 'Coach',           emoji: '💪' },
+  { id: 'street_smart',  label: 'Street Smart',    emoji: '🌆' },
+  { id: 'conspiracy_nut',label: 'Conspiracy Nut',  emoji: '👁️' },
+  { id: 'comedian',      label: 'Comedian',        emoji: '😂' },
+  { id: 'pirate',        label: 'Pirate',          emoji: '☠️' },
+  { id: 'girlfriend',    label: 'Girlfriend',      emoji: '💕' },
+  { id: 'boyfriend',     label: 'Boyfriend',       emoji: '💙' },
+  { id: 'professional',  label: 'Professional',    emoji: '💼' },
 ];
 
 export default function Home() {
@@ -45,16 +45,18 @@ export default function Home() {
       {/* ── Hero ─────────────────────────────── */}
       <section className={styles.hero}>
         <div className={styles.heroGlow} aria-hidden="true" />
+        <div className={styles.heroGrid} aria-hidden="true" />
         <div className={styles.heroContent}>
           <span className={styles.eyebrow}>15 Personalities · 5 Voice Engines · Multi-Model</span>
-          <h1 className={styles.headline}>SmartAss AI</h1>
+          <h1 className={styles.headline}>
+            <span className={styles.headlineWise}>Wise</span><span className={styles.headlineGuy}>Guy</span> AI
+          </h1>
           <p className={styles.tagline}>
-            The AI that doesn't pull its punches. No disclaimers, no corporate tone —
-            just brutally honest, entertaining conversation with a personality you actually choose.
+            Real talk, no corporate tone. An AI with actual personality — you pick which one.
           </p>
           <div className={styles.ctas}>
             <Link href="/chat" className={styles.ctaPrimary}>Start Chatting →</Link>
-            <Link href="/customize" className={styles.ctaSecondary}>Meet the Personas</Link>
+            <Link href="/customize" className={styles.ctaSecondary}>Explore Personas</Link>
           </div>
         </div>
         <div className={styles.scrollHint} aria-hidden="true">
@@ -91,7 +93,7 @@ export default function Home() {
           ))}
         </div>
         <Link href="/customize" className={styles.sectionLink}>
-          Explore & customize personas →
+          Explore &amp; customize personas →
         </Link>
       </section>
 
@@ -102,15 +104,14 @@ export default function Home() {
         <span className={styles.proTeaserBadge}>Pro</span>
         <h3 className={styles.proTeaserTitle}>Unlock the full roster</h3>
         <p className={styles.proTeaserDesc}>
-          Premium personas, ElevenLabs voices, OpenAI TTS, and Orpheus — all waiting.
-          One plan, everything included.
+          All 15 personas, ElevenLabs voices, OpenAI TTS, and Orpheus — one plan, everything included.
         </p>
         <Link href="/paid" className={styles.proTeaserBtn}>See what's in Pro →</Link>
       </div>
 
       {/* ── Footer ─────────────────────────────── */}
       <footer className={styles.footer}>
-        <span className={styles.footerBrand}>SmartAss AI</span>
+        <span className={styles.footerBrand}>WiseGuy AI</span>
         <span className={styles.footerNote}>Your settings live in this browser. No account required.</span>
       </footer>
 
