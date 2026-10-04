@@ -6,11 +6,9 @@ import { PERSONAS } from '../../lib/personality';
 import styles from './paid.module.css';
 
 const TTS_ENGINES = [
-  { id: 'browser',    label: 'Browser TTS',    desc: 'Free, built-in, no credits.', pro: false },
-  { id: 'google',     label: 'Google TTS',      desc: 'High quality. Uses Gemini key.', pro: false },
-  { id: 'elevenlabs', label: 'ElevenLabs',       desc: 'Most expressive. 1,000+ voices.', pro: true },
-  { id: 'openai',     label: 'OpenAI TTS',       desc: 'Very natural. gpt-4o-mini-tts.', pro: true },
-  { id: 'orpheus',    label: 'Orpheus TTS',       desc: 'Emotion-reactive. Via Groq.', pro: true },
+  { id: 'browser', label: 'Browser TTS', desc: 'Built-in. Free, works everywhere.',      pro: false },
+  { id: 'google',  label: 'Google TTS',  desc: 'High quality. Free via Gemini key.',     pro: false },
+  { id: 'orpheus', label: 'Orpheus TTS', desc: 'Emotion-reactive. Free via Groq key.',   pro: false },
 ];
 
 export default function PaidPage() {

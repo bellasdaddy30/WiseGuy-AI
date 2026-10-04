@@ -2,27 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import {
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY,
-  TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
-  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE,
-  DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
-  GOOGLE_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
+  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ORPHEUS_KEY,
+  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ORPHEUS_VOICE,
+  GOOGLE_VOICES, ORPHEUS_VOICES,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { clearHistory } from '../../lib/history';
 import { PERSONALITY_KEY } from '../../lib/personality';
 import { getMemory, addMemoryItem, removeMemoryItem, clearMemory, MEMORY_KEY } from '../../lib/memory';
-import { isTtsPro } from '../../lib/premium';
-import PremiumBadge from '../../components/PremiumBadge';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
-  { id: 'browser',    label: 'Browser',    desc: 'Free, built-in, works everywhere. Limited voice quality.' },
-  { id: 'google',     label: 'Google',     desc: 'High quality. Uses your Gemini API key.' },
-  { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Most expressive. Uses your ElevenLabs credits.' },
-  { id: 'openai',     label: 'OpenAI',     desc: 'Very natural. Uses your OpenAI API credits.' },
-  { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Uses your Groq API key.' },
+  { id: 'browser',  label: 'Browser',  desc: 'Built-in. Free, works everywhere. Basic quality.' },
+  { id: 'google',   label: 'Google',   desc: 'High quality. Free via your Gemini API key.' },
+  { id: 'orpheus',  label: 'Orpheus',  desc: 'Emotion-reactive. Free via your Groq API key.' },
 ];
 
 const VOICE_MODES = [
@@ -32,13 +26,6 @@ const VOICE_MODES = [
   { id: 'handsfree', label: 'Hands Free',   desc: 'AI listens again after each response.' },
 ];
 
-const CAT_LABEL = {
-  professional: 'Professional',
-  premade:      'Premade',
-  cloned:       'Cloned',
-  generated:    'Generated',
-};
-
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v !== null ? v : fallback; } catch { return fallback; }
 }
@@ -47,71 +34,34 @@ function save(key, value) {
 }
 
 export default function SettingsPage() {
-  const [ttsProvider,   setTtsProvider]   = useState(DEFAULT_TTS_PROVIDER);
-  const [googleVoice,   setGoogleVoice]   = useState(DEFAULT_GOOGLE_VOICE);
-  const [elVoice,       setElVoice]       = useState(DEFAULT_ELEVENLABS_VOICE);
-  const [oaVoice,       setOaVoice]       = useState(DEFAULT_OPENAI_VOICE);
-  const [orVoice,       setOrVoice]       = useState(DEFAULT_ORPHEUS_VOICE);
-  const [aiVoice,       setAiVoice]       = useState(true);
-  const [voiceMode,     setVoiceMode]     = useState('off');
-  const [clearConfirm,  setClearConfirm]  = useState(false);
-  const [cleared,       setCleared]       = useState(false);
-  const [resetConfirm,  setResetConfirm]  = useState(false);
-  const [saved,         setSaved]         = useState(false);
+  const [ttsProvider, setTtsProvider] = useState(DEFAULT_TTS_PROVIDER);
+  const [googleVoice, setGoogleVoice] = useState(DEFAULT_GOOGLE_VOICE);
+  const [orVoice,     setOrVoice]     = useState(DEFAULT_ORPHEUS_VOICE);
+  const [aiVoice,     setAiVoice]     = useState(true);
+  const [voiceMode,   setVoiceMode]   = useState('off');
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [cleared,      setCleared]      = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [saved,        setSaved]        = useState(false);
 
   // Memory
-  const [memoryItems,   setMemoryItems]   = useState([]);
-  const [memInput,      setMemInput]      = useState('');
-  const [memCleared,    setMemCleared]    = useState(false);
-
-  // ElevenLabs dynamic voice list
-  const [elVoices,      setElVoices]      = useState(null); // null = not yet loaded
-  const [elLoading,     setElLoading]     = useState(false);
-  const [elError,       setElError]       = useState('');
+  const [memoryItems, setMemoryItems] = useState([]);
+  const [memInput,    setMemInput]    = useState('');
+  const [memCleared,  setMemCleared]  = useState(false);
 
   useEffect(() => {
     setMemoryItems(getMemory());
     setTtsProvider(load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER));
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
-    setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
-    setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
   }, []);
 
-  // Fetch ElevenLabs voices when ElevenLabs is selected
-  useEffect(() => {
-    if (ttsProvider !== 'elevenlabs' || elVoices !== null) return;
-    setElLoading(true);
-    setElError('');
-    fetch('/api/elevenlabs-voices')
-      .then(r => r.json())
-      .then(data => {
-        if (!data.voices?.length) {
-          setElError('No voices returned — check your ElevenLabs API key.');
-          setElVoices([]);
-        } else {
-          setElVoices(data.voices);
-          // If current saved voice isn't in the list, reset to first available
-          if (!data.voices.some(v => v.id === elVoice)) {
-            setElVoice(data.voices[0].id);
-          }
-        }
-      })
-      .catch(() => {
-        setElError('Could not load voices. Check your connection.');
-        setElVoices([]);
-      })
-      .finally(() => setElLoading(false));
-  }, [ttsProvider]);
-
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
     save(TTS_VOICE_GOOGLE_KEY, googleVoice);
-    save(TTS_VOICE_ELEVENLABS_KEY, elVoice);
-    save(TTS_VOICE_OPENAI_KEY, oaVoice);
     save(TTS_VOICE_ORPHEUS_KEY, orVoice);
     save(AI_VOICE_KEY, aiVoice);
     if (voiceMode === 'handsfree') {
@@ -139,8 +89,6 @@ export default function SettingsPage() {
     try {
       localStorage.removeItem(TTS_PROVIDER_KEY);
       localStorage.removeItem(TTS_VOICE_GOOGLE_KEY);
-      localStorage.removeItem(TTS_VOICE_ELEVENLABS_KEY);
-      localStorage.removeItem(TTS_VOICE_OPENAI_KEY);
       localStorage.removeItem(TTS_VOICE_ORPHEUS_KEY);
       localStorage.removeItem(AI_VOICE_KEY);
       localStorage.removeItem(VOICE_MODE_KEY);
@@ -151,8 +99,6 @@ export default function SettingsPage() {
     setResetConfirm(false);
     setTtsProvider(DEFAULT_TTS_PROVIDER);
     setGoogleVoice(DEFAULT_GOOGLE_VOICE);
-    setElVoice(DEFAULT_ELEVENLABS_VOICE);
-    setOaVoice(DEFAULT_OPENAI_VOICE);
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
     setAiVoice(true);
     setVoiceMode('off');
@@ -178,30 +124,9 @@ export default function SettingsPage() {
     setTimeout(() => setMemCleared(false), 3000);
   }
 
-  const voiceMap     = { google: googleVoice, openai: oaVoice, orpheus: orVoice };
-  const voiceSetters = { google: setGoogleVoice, openai: setOaVoice, orpheus: setOrVoice };
-  const voiceLists   = { google: GOOGLE_VOICES, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
-
-  // Build grouped <optgroup> elements for ElevenLabs
-  function renderElVoiceOptions() {
-    if (!elVoices?.length) return null;
-    const groups = {};
-    for (const v of elVoices) {
-      const cat = v.category ?? 'premade';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(v);
-    }
-    const catOrder = ['professional', 'premade', 'cloned', 'generated'];
-    return catOrder
-      .filter(c => groups[c]?.length)
-      .map(c => (
-        <optgroup key={c} label={CAT_LABEL[c] ?? c}>
-          {groups[c].map(v => (
-            <option key={v.id} value={v.id}>{v.name}</option>
-          ))}
-        </optgroup>
-      ));
-  }
+  const voiceMap     = { google: googleVoice, orpheus: orVoice };
+  const voiceSetters = { google: setGoogleVoice, orpheus: setOrVoice };
+  const voiceLists   = { google: GOOGLE_VOICES, orpheus: ORPHEUS_VOICES };
 
   return (
     <main className={styles.page}>
@@ -210,7 +135,7 @@ export default function SettingsPage() {
       {/* ── VOICE ENGINE ─────────────────────────────────────── */}
       <section className={styles.section}>
         <h2 className={styles.sectionLabel}>Voice Engine</h2>
-        <p className={styles.sectionDesc}>Which service reads AI responses aloud.</p>
+        <p className={styles.sectionDesc}>Which service reads AI responses aloud. All free.</p>
 
         <div className={styles.providerGrid}>
           {TTS_PROVIDERS.map(p => (
@@ -219,47 +144,26 @@ export default function SettingsPage() {
               className={`${styles.providerCard} ${ttsProvider === p.id ? styles.active : ''}`}
               onClick={() => setTtsProvider(p.id)}
             >
-              <span className={styles.providerNameRow}>
-                <span className={styles.providerName}>{p.label}</span>
-                {isTtsPro(p.id) && <PremiumBadge />}
-              </span>
+              <span className={styles.providerName}>{p.label}</span>
               <span className={styles.providerDesc}>{p.desc}</span>
             </button>
           ))}
         </div>
 
-        {/* Voice picker for non-browser providers */}
         {ttsProvider !== 'browser' && (
           <div className={styles.voiceRow}>
             <label className={styles.voiceLabel}>
               {TTS_PROVIDERS.find(p => p.id === ttsProvider)?.label} Voice
             </label>
-
-            {ttsProvider === 'elevenlabs' ? (
-              elLoading ? (
-                <span className={styles.voiceLoading}>Loading voices…</span>
-              ) : elError ? (
-                <span className={styles.voiceError}>{elError}</span>
-              ) : (
-                <select
-                  className={styles.select}
-                  value={elVoice}
-                  onChange={e => setElVoice(e.target.value)}
-                >
-                  {renderElVoiceOptions()}
-                </select>
-              )
-            ) : (
-              <select
-                className={styles.select}
-                value={voiceMap[ttsProvider]}
-                onChange={e => voiceSetters[ttsProvider](e.target.value)}
-              >
-                {voiceLists[ttsProvider]?.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            )}
+            <select
+              className={styles.select}
+              value={voiceMap[ttsProvider]}
+              onChange={e => voiceSetters[ttsProvider](e.target.value)}
+            >
+              {voiceLists[ttsProvider]?.map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
           </div>
         )}
       </section>
