@@ -22,7 +22,6 @@ const TTS_PROVIDERS = [
   { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.', adminOnly: true },
 ];
 
-const ADMIN_PIN = process.env.NEXT_PUBLIC_ADMIN_PIN ?? '';
 const ADMIN_KEY = 'adminUnlocked';
 
 const VOICE_MODES = [
@@ -95,7 +94,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMemoryItems(getMemory());
-    const isUnlocked = !ADMIN_PIN || load(ADMIN_KEY, '') === ADMIN_PIN;
+    const isUnlocked = load(ADMIN_KEY, '') === '1';
     setAdminUnlocked(isUnlocked);
     const tp = load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER);
     // If a locked provider is stored but admin isn't unlocked, fall back to browser
@@ -563,35 +562,43 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Admin unlock — only visible when NEXT_PUBLIC_ADMIN_PIN is set */}
-      {ADMIN_PIN && (
-        <div className={styles.adminRow}>
-          {adminUnlocked ? (
-            <button className={styles.adminBtn} onClick={() => {
-              save(ADMIN_KEY, '');
-              setAdminUnlocked(false);
-              if (TTS_PROVIDERS.find(p => p.id === ttsProvider)?.adminOnly) {
-                setTtsProvider(DEFAULT_TTS_PROVIDER);
-              }
-            }}>
-              Admin: ON — tap to lock
-            </button>
-          ) : (
-            <button className={styles.adminBtn} onClick={() => {
-              const pin = window.prompt('Admin PIN:');
-              if (pin === null) return;
-              if (pin === ADMIN_PIN) {
-                save(ADMIN_KEY, ADMIN_PIN);
+      {/* Admin unlock — hidden when no ADMIN_PIN env var is set on the server */}
+      <div className={styles.adminRow}>
+        {adminUnlocked ? (
+          <button className={styles.adminBtn} onClick={() => {
+            save(ADMIN_KEY, '');
+            setAdminUnlocked(false);
+            if (TTS_PROVIDERS.find(p => p.id === ttsProvider)?.adminOnly) {
+              setTtsProvider(DEFAULT_TTS_PROVIDER);
+            }
+          }}>
+            Admin: ON — tap to lock
+          </button>
+        ) : (
+          <button className={styles.adminBtn} onClick={async () => {
+            const pin = window.prompt('Admin PIN:');
+            if (pin === null) return;
+            try {
+              const res = await fetch('/api/admin-unlock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin }),
+              });
+              const data = await res.json();
+              if (data.granted) {
+                save(ADMIN_KEY, '1');
                 setAdminUnlocked(true);
               } else {
                 window.alert('Incorrect PIN.');
               }
-            }}>
-              Admin unlock
-            </button>
-          )}
-        </div>
-      )}
+            } catch {
+              window.alert('Could not reach server. Try again.');
+            }
+          }}>
+            Admin unlock
+          </button>
+        )}
+      </div>
     </main>
   );
 }
