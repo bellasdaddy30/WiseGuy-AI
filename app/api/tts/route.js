@@ -3,8 +3,12 @@ import { getApiKey } from '../../../lib/providers';
 import { trimTrailingBurst } from '../../../lib/pcmTail';
 import { isAdmin, adminRequired } from '../../../lib/adminAuth';
 import { isTtsAdminOnly } from '../../../lib/premium';
+import { qwenSpeak, DEFAULT_QWEN_SPACE } from '../../../lib/qwen';
 
-export const maxDuration = 30;
+// Qwen runs on a shared GPU that can queue or need waking, so one call can
+// take far longer than the other voices. 60 s is the most a free Vercel plan
+// is certain to allow.
+export const maxDuration = 60;
 
 // Fade the first and last 20 ms (fadeSecs) of 16-bit LE PCM to silence to prevent click artifacts
 function applyFades(pcm, sampleRate, fadeSecs = 0.02) {
@@ -325,6 +329,42 @@ async function orpheusTts(text, voice, persona) {
   return new Response(wav, { headers: { 'Content-Type': 'audio/wav' } });
 }
 
+// Qwen3-TTS on the owner's own Hugging Face Space (lib/qwen.js). Every call
+// spends part of that Space's small daily GPU allowance, which is why this
+// voice sits behind the admin lock.
+//
+// `style` is how to say it. If the user left that empty, the persona's own
+// speaking style is used, the same description the Google voice gets.
+const QWEN_TIMEOUT_MS = 55000;
+
+async function qwenTts(text, voice, persona, style) {
+  const instruct = (typeof style === 'string' && style.trim()) || PERSONA_VOICE_STYLE[persona] || '';
+  try {
+    const result = await qwenSpeak({
+      space: process.env.QWEN_SPACE || DEFAULT_QWEN_SPACE,
+      // Optional. With it, calls count against the owner's Hugging Face
+      // allowance; without it they share the much smaller anonymous one.
+      token: (process.env.HF_TOKEN || '').trim(),
+      text,
+      speaker: voice,
+      instruct: instruct.slice(0, 400),
+      signal: AbortSignal.timeout(QWEN_TIMEOUT_MS),
+    });
+    console.log('[tts/qwen]', JSON.stringify({ voice, chars: text.length, seconds: +result.seconds.toFixed(1), bytes: result.audio.byteLength }));
+    // The Space labels the file as generic binary; it is a wav.
+    return new Response(result.audio, { headers: { 'Content-Type': 'audio/wav' } });
+  } catch (err) {
+    console.error('[tts/qwen]', err.stage || '', String(err.message).slice(0, 300));
+    if (err.quota) {
+      return Response.json({ error: "Qwen's daily GPU allowance is used up — using another voice for now." }, { status: 429 });
+    }
+    if (err.name === 'TimeoutError' || err.name === 'AbortError' || /aborted|timed? ?out/i.test(String(err.message))) {
+      return Response.json({ error: 'Qwen took too long to answer. The Space may be waking up — try again in a minute.' }, { status: 504 });
+    }
+    return Response.json({ error: `Qwen voice error: ${String(err.message).slice(0, 200)}` }, { status: 502 });
+  }
+}
+
 const MAX_TTS_CHARS = 4000;
 
 export async function POST(request) {
@@ -332,7 +372,7 @@ export async function POST(request) {
   try { body = await request.json(); } catch {
     return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   }
-  const { text, provider, voice, persona } = body;
+  const { text, provider, voice, persona, style } = body;
 
   if (!text?.trim()) {
     return Response.json({ error: 'No text provided.' }, { status: 400 });
@@ -349,6 +389,7 @@ export async function POST(request) {
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);
   if (provider === 'openai')      return openAiTts(text, voice || 'ash', persona);
   if (provider === 'orpheus')     return orpheusTts(text, voice || 'autumn', persona);
+  if (provider === 'qwen')        return qwenTts(text, voice || 'Ryan', persona, style);
 
   return Response.json({ error: 'Unknown TTS provider.' }, { status: 400 });
 }
