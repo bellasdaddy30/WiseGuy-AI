@@ -3,6 +3,23 @@ import { getApiKey } from '../../../lib/providers';
 
 export const maxDuration = 30;
 
+// Fade the first and last 5ms of 16-bit LE PCM to silence to prevent click artifacts
+function applyFades(pcm, sampleRate, fadeSecs = 0.005) {
+  // Ensure byte-aligned to 16-bit samples
+  const buf = pcm.length % 2 === 0 ? pcm : pcm.slice(0, -1);
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const totalSamples = buf.length / 2;
+  const fadeSamples  = Math.min(Math.floor(sampleRate * fadeSecs), Math.floor(totalSamples / 2));
+  for (let i = 0; i < fadeSamples; i++) {
+    const gain   = i / fadeSamples;
+    const inOff  = i * 2;
+    const outOff = (totalSamples - 1 - i) * 2;
+    view.setInt16(inOff,  Math.round(view.getInt16(inOff,  true) * gain), true);
+    view.setInt16(outOff, Math.round(view.getInt16(outOff, true) * gain), true);
+  }
+  return buf;
+}
+
 function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
   const buf  = new ArrayBuffer(44);
   const view = new DataView(buf);
@@ -77,9 +94,10 @@ async function googleTts(text, voiceName, persona) {
     return Response.json({ error: 'No audio in Google TTS response.' }, { status: 502 });
   }
 
-  const pcm    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const rawPcm = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const rateM  = mime.match(/rate=(\d+)/);
   const rate   = rateM ? parseInt(rateM[1]) : 24000;
+  const pcm    = applyFades(rawPcm, rate);
   const header = buildWavHeader(pcm.length, rate);
   const wav    = new Uint8Array(header.length + pcm.length);
   wav.set(header);
