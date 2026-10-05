@@ -2,6 +2,7 @@ import './globals.css';
 import Navbar from '../components/Navbar';
 import SessionProvider from '../components/SessionProvider';
 import PWARegister from '../components/PWARegister';
+import AgeGate from '../components/AgeGate';
 import { auth } from '../auth';
 
 export const metadata = {
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }) {
       </head>
       <body>
         <PWARegister />
+        <AgeGate />
         <SessionProvider session={session}>
           <Navbar />
           {children}
