@@ -11,8 +11,10 @@ import {
   stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
   BROWSER_SEGMENT_STYLE,
   GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES, PERSONA_BROWSER_TTS,
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  TTS_PROVIDER_KEY, TTS_SPEED_KEY,
+  TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
+  DEFAULT_TTS_SPEED,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
@@ -46,6 +48,7 @@ export default function ChatPage() {
   const [convHistory, setConvHistory]   = useState([]);
   const [alwaysOn, setAlwaysOn]         = useState(false);
   const [micMuted, setMicMuted]         = useState(false);
+  const [ttsSpeed, setTtsSpeed]         = useState(DEFAULT_TTS_SPEED);
 
   const convIdRef      = useRef(null);
   const convCreatedRef = useRef(null);
@@ -68,6 +71,7 @@ export default function ChatPage() {
   const elVoiceRef     = useRef(elVoice);
   const oaVoiceRef     = useRef(oaVoice);
   const orVoiceRef     = useRef(orVoice);
+  const ttsSpeedRef         = useRef(DEFAULT_TTS_SPEED);
   const loadingRef          = useRef(loading);
   const messagesRef         = useRef(messages);
   const alwaysOnRef         = useRef(false);
@@ -83,6 +87,7 @@ export default function ChatPage() {
   useEffect(() => { elVoiceRef.current       = elVoice;     }, [elVoice]);
   useEffect(() => { oaVoiceRef.current       = oaVoice;     }, [oaVoice]);
   useEffect(() => { orVoiceRef.current       = orVoice;     }, [orVoice]);
+  useEffect(() => { ttsSpeedRef.current      = ttsSpeed;    }, [ttsSpeed]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
   useEffect(() => { alwaysOnRef.current      = alwaysOn;   }, [alwaysOn]);
@@ -131,6 +136,8 @@ export default function ChatPage() {
       if (ov && OPENAI_VOICES.some(v => v.id === ov)) setOaVoice(ov);
       const rv = localStorage.getItem(TTS_VOICE_ORPHEUS_KEY);
       if (rv && ORPHEUS_VOICES.some(v => v.id === rv)) setOrVoice(rv);
+      const spd = parseFloat(localStorage.getItem(TTS_SPEED_KEY));
+      if (spd > 0) { setTtsSpeed(spd); ttsSpeedRef.current = spd; }
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -285,7 +292,7 @@ export default function ChatPage() {
       case 'not-allowed':
       case 'service-not-allowed':
         return isIOS
-          ? 'Mic blocked. Open Settings → Safari → Microphone, allow this site, then try again.'
+          ? 'Mic blocked. Go to Settings → Safari → Microphone, allow this site, then reload the page and try again.'
           : 'Mic blocked. Click the lock icon in your browser address bar and allow the microphone.';
       case 'network':
         return 'Voice input requires HTTPS — use the wiseguy-ai.vercel.app URL, not localhost.';
@@ -483,7 +490,7 @@ export default function ChatPage() {
         segments.forEach((seg, i) => {
           const mod  = BROWSER_SEGMENT_STYLE[seg.style] ?? BROWSER_SEGMENT_STYLE.normal;
           const utt  = new SpeechSynthesisUtterance(seg.text);
-          utt.rate   = Math.min(2, browserStyle.rate * mod.rate);
+          utt.rate   = Math.min(2, browserStyle.rate * mod.rate * ttsSpeedRef.current);
           utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
           utt.volume = mod.volume;
           if (i === segments.length - 1) { utt.onend = resolve; utt.onerror = resolve; }
@@ -513,6 +520,7 @@ export default function ChatPage() {
           const source = ctx.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(ctx.destination);
+          source.playbackRate.value = ttsSpeedRef.current;
           source.onended = resolve;
           sourceNodeRef.current = source;
           source.start(0);
@@ -735,8 +743,8 @@ export default function ChatPage() {
         setAiVoice(true);
         try { localStorage.setItem(AI_VOICE_KEY, 'true'); } catch {}
       }
-      // Start listening right away
-      setTimeout(() => startListening(), 100);
+      // Start listening right away — must be synchronous on iOS (gesture context)
+      startListening();
     } else {
       stopAudio();
       recognitionRef.current?.stop();

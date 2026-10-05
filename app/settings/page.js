@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  TTS_PROVIDER_KEY,
+  TTS_PROVIDER_KEY, TTS_SPEED_KEY,
   TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
+  DEFAULT_TTS_SPEED,
   GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
@@ -67,6 +68,7 @@ export default function SettingsPage() {
   const [dvSaved,          setDvSaved]          = useState(false);
   const [dvError,          setDvError]          = useState('');
 
+  const [voiceSpeed,     setVoiceSpeed]     = useState(DEFAULT_TTS_SPEED);
   const [clearConfirm,   setClearConfirm]   = useState(false);
   const [cleared,        setCleared]        = useState(false);
   const [resetConfirm,   setResetConfirm]   = useState(false);
@@ -105,6 +107,7 @@ export default function SettingsPage() {
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
     setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
+    setVoiceSpeed(parseFloat(load(TTS_SPEED_KEY, String(DEFAULT_TTS_SPEED))) || DEFAULT_TTS_SPEED);
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
@@ -113,6 +116,7 @@ export default function SettingsPage() {
 
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
+    save(TTS_SPEED_KEY, voiceSpeed);
     save(TTS_VOICE_GOOGLE_KEY, googleVoice);
     save(TTS_VOICE_ELEVENLABS_KEY, elVoice);
     save(TTS_VOICE_OPENAI_KEY, oaVoice);
@@ -149,6 +153,7 @@ export default function SettingsPage() {
       localStorage.removeItem(AI_VOICE_KEY);
       localStorage.removeItem(VOICE_MODE_KEY);
       localStorage.removeItem(HANDS_FREE_KEY);
+      localStorage.removeItem(TTS_SPEED_KEY);
       localStorage.removeItem(MODEL_KEY);
       localStorage.removeItem(PERSONALITY_KEY);
     } catch {}
@@ -158,6 +163,7 @@ export default function SettingsPage() {
     setElVoice(DEFAULT_ELEVENLABS_VOICE);
     setOaVoice(DEFAULT_OPENAI_VOICE);
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
+    setVoiceSpeed(DEFAULT_TTS_SPEED);
     setAiVoice(true);
     setVoiceMode('off');
     setSaved(true);
@@ -445,6 +451,19 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+
+        <div className={styles.speedRow}>
+          <span className={styles.speedLabel}>Speed</span>
+          <div className={styles.speedPills}>
+            {[0.75, 1.0, 1.25, 1.5, 1.75].map(s => (
+              <button
+                key={s}
+                className={`${styles.speedPill} ${voiceSpeed === s ? styles.speedPillActive : ''}`}
+                onClick={() => setVoiceSpeed(s)}
+              >{s === 1.0 ? '1× Normal' : `${s}×`}</button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ── VOICE INPUT / MODE ───────────────────────────────── */}

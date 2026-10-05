@@ -4,7 +4,7 @@ import { getApiKey } from '../../../lib/providers';
 export const maxDuration = 30;
 
 // Fade the first and last 5ms of 16-bit LE PCM to silence to prevent click artifacts
-function applyFades(pcm, sampleRate, fadeSecs = 0.005) {
+function applyFades(pcm, sampleRate, fadeSecs = 0.02) {
   // Ensure byte-aligned to 16-bit samples
   const buf = pcm.length % 2 === 0 ? pcm : pcm.slice(0, -1);
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
