@@ -1,7 +1,7 @@
-# SmartAss AI — Project Handoff for Claude Code
+# WiseGuy AI (formerly SmartAss AI) — Project Notes for Claude Code
 
-This file carries context from a planning session (claude.ai cloud, Oct 2026) into
-local Claude Code sessions on **Ragnarok**. Read it fully before doing anything.
+Renamed from SmartAss AI to **WiseGuy AI** on 2026-10-05. The GitHub repo is still
+`bellasdaddy30/Smartass-AI`; the package name is `wiseguy-ai`. Read this fully first.
 
 ## Who you're working with
 
@@ -12,66 +12,30 @@ local Claude Code sessions on **Ragnarok**. Read it fully before doing anything.
 - He's been burned by stacked untested changes. One verified step at a time.
 - Humor is welcome; don't let it slow down the fix.
 
-## Machine / environment (verified)
+## Machine / environment
 
-- Machine: **Ragnarok**, Lubuntu (apt, not Termux/pkg), user `fenrir`, controlled via RustDesk.
-- Project path: `~/smartass-ai` (Next.js / React / Node). Contains `app/`, `node_modules/`,
-  `package.json`, `package-lock.json`. Original handoff said it was on a Fire tablet —
-  **it is actually on Ragnarok.**
-- Firefox is a snap and spams harmless warnings (`cannot change mount namespace`,
-  `Gtk-WARNING ... settings.ini: Permission denied`). Ignore them. Browser-based logins
-  launched from the terminal are flaky — prefer doing web approvals on Chris's phone.
-- `gh` 2.46.0 installed via apt. `gh auth status` shows logged in as `bellasdaddy30`
-  (token in keyring).
-- No API keys were found hardcoded in `app/` or `package.json` (`grep -rn "sk-"` was clean).
+- Dev machine: **Ragnarok**, Lubuntu, user `fenrir`, project at `~/smartass-ai`.
+- Chris mostly uses the app on an **iPhone**, often installed to the Home Screen (PWA).
+  Safari's built-in speech recognition does NOT work in Home Screen apps (WebKit bug
+  225298), so voice input falls back to recording + `/api/transcribe` (Whisper on Groq).
+- Firefox on Ragnarok is a snap and spams harmless warnings. Prefer doing web logins
+  on Chris's phone.
+- Deploy target: Vercel (`vercel.json`, `scripts/push-env-to-vercel.sh`).
+- **Never print, echo, log, or commit a token or API key.** Chris edits `.env.local` himself.
 
-## GitHub repo
+## Server-side secrets / env vars (names only)
 
-- Remote: `https://github.com/bellasdaddy30/Smartass-AI.git` — **private**.
-- `main` has only a README commit. None of the project code has been pushed yet.
-- This file lives on branch `claude/smartass-ai-handoff-6g7665`.
+`GROQ_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `OPENAI_API_KEY`,
+`ELEVENLABS_API_KEY`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`,
+`ADMIN_PIN`.
 
-### Current blocker: git auth (state at handoff)
+## Admin lock (paid voices)
 
-Already done in `~/smartass-ai`:
-- `.gitignore` contains `node_modules/`, `.env*`, `!.env.example`, `.next/`
-- `git init -b main` and `git remote add origin ...` — done
-- `gh auth setup-git` — done (`~/.gitconfig` has a global `credential.helper store`, plus
-  github.com-scoped helpers reset to `!/usr/bin/gh auth git-credential`)
-
-Symptom: `git fetch origin main` → `remote: Invalid username or token. Password
-authentication is not supported for Git operations.`
-
-Evidence collected:
-- `gh api repos/bellasdaddy30/Smartass-AI` works (private: true). Note: the `permissions`
-  field there reflects the *account's* role, not the token's scopes — it proves nothing
-  about the token's Contents access.
-- `gh auth git-credential get` returns `username=bellasdaddy30` and the same
-  `github_pat_...` token gh uses. So the helper wiring is fine.
-- Leading hypothesis: the **fine-grained** PAT lacks **Contents: Read and write**
-  (git refuses it while basic API metadata calls succeed). Test without exposing the token:
-  `gh api repos/bellasdaddy30/Smartass-AI/contents/README.md --jq .name`
-  → 403 "Resource not accessible by personal access token" confirms.
-- Fix options (Chris may already have done one):
-  1. Edit the fine-grained token on github.com → Repository permissions → Contents: Read and write.
-  2. Or replace it with a **classic** token (`repo` + `read:org`, 30-day expiry) via
-     `gh auth login` → Paste an authentication token.
-- **Never print, echo, log, or commit a token.** Don't `cat ~/.git-credentials`.
-
-### Push sequence once auth works
-
-```bash
-cd ~/smartass-ai
-git fetch origin main
-git reset origin/main          # adopt remote history; does NOT touch working files
-git checkout -- README.md      # restore the remote README into the working tree
-git add .
-git status                     # SHOW CHRIS: no node_modules/, .next/, or .env* allowed
-git commit -m "Baseline: existing SmartAss AI project"
-git push -u origin main
-```
-Then bring this handoff file in: `git fetch origin claude/smartass-ai-handoff-6g7665 &&
-git checkout origin/claude/smartass-ai-handoff-6g7665 -- CLAUDE.md` and commit it to main.
+ElevenLabs, OpenAI and Orpheus voices and the voice designer spend Chris's credits or
+quota. They are gated **on the server** by `lib/adminAuth.js`: `/api/admin-unlock`
+checks `ADMIN_PIN` and sets a signed httpOnly cookie (signed with `AUTH_SECRET`); the
+paid routes call `isAdmin(request)`. With no `ADMIN_PIN`, paid features are open in
+`npm run dev` and closed in production. Never gate paid features only in the UI.
 
 ## Product vision (condensed from Chris's brief)
 
