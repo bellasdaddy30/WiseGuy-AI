@@ -139,6 +139,14 @@
   font-weight: 500;
 }
 
+/* Shown in place of the plan when the account row is missing or unreachable */
+.note {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .signOutBtn {
   width: 100%;
   padding: 0.65rem;

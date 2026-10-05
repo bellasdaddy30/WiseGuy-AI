@@ -28,8 +28,30 @@ name is `wiseguy-ai`. Read this fully first.
 
 `GROQ_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `OPENAI_API_KEY`,
 `ELEVENLABS_API_KEY`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`,
-`ADMIN_PIN`. Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
+`ADMIN_PIN`, `DATABASE_URL` (added to Vercel by the Neon integration; Ragnarok has none).
+Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
 `QWEN_SPACE` (use a different Space than the default).
+
+## Database (who has signed in, and their plan)
+
+- Postgres on **Neon**, free plan, connected through Vercel's Marketplace. It sleeps after
+  5 idle minutes and wakes itself on the next query, so the first request after a quiet
+  spell is a second or two slower.
+- **No passwords are stored, ever.** Sign-in is Google via Auth.js (`auth.js`). The app
+  keeps one row per person in `users`, keyed on Google's permanent ID for them.
+- `lib/db.js` is the only file that talks to Postgres (driver: `pg`). It creates missing
+  tables the first time it is used, so there is no migration step. To add a table or a
+  column, add an `IF NOT EXISTS` statement to `SCHEMA` there.
+- `lib/users.js` writes the row at sign-in (`recordSignIn`) and reads it (`getUser`).
+  Signing in never changes `plan`. Always pass values as `$1, $2` parameters.
+- `/api/health` says whether the server can reach the database: `ok`, `not_configured` or
+  `error`. Check it after a deploy that touches the database.
+- With no `DATABASE_URL` the app still runs and sign-in still works; nothing is saved on
+  the server and the Account page says so. A database outage must never block sign-in.
+- Still on the device only (localStorage), not in the database yet: chat history, memory,
+  settings, voice tuning.
+- Not done yet: `/api/chat` and the free voices do not check who is calling, and
+  `useIsPremium()` still returns true for everyone.
 
 ## Admin lock (paid voices)
 

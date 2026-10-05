@@ -1,5 +1,29 @@
 import { auth, signIn, signOut } from '../../auth';
+import { dbConfigured } from '../../lib/db';
+import { getUser } from '../../lib/users';
+import { PLANS } from '../../lib/premium';
 import styles from './account.module.css';
+
+// Reads the signed-in user's row from the database. Returns
+//   { account }   the row, when everything is in place
+//   { note }      a plain explanation when it is not
+async function loadAccount(session) {
+  if (!dbConfigured()) {
+    return { note: 'Account storage is not set up on this copy of the app, so nothing about you is saved on the server.' };
+  }
+  if (!session.user.id) {
+    // Signed in before accounts were saved, or the save failed at sign-in
+    return { note: 'Your account has not been saved yet. Sign out and back in once to finish setting it up.' };
+  }
+  try {
+    const account = await getUser(session.user.id);
+    if (account) return { account };
+    return { note: 'Your account could not be found. Sign out and back in to set it up again.' };
+  } catch (err) {
+    console.error('[account] could not load the user:', err.code || err.message);
+    return { note: 'Your account details could not be loaded right now. Try again in a moment.' };
+  }
+}
 
 export default async function AccountPage() {
   const session = await auth();
@@ -29,6 +53,11 @@ export default async function AccountPage() {
   }
 
   const { name, email, image } = session.user;
+  const { account, note } = await loadAccount(session);
+  const plan = account ? (PLANS[account.plan]?.label ?? account.plan) : null;
+  const since = account
+    ? new Date(account.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    : null;
 
   return (
     <main className={styles.page}>
@@ -53,10 +82,19 @@ export default async function AccountPage() {
             <span className={styles.rowLabel}>Signed in via</span>
             <span className={styles.rowValue}>Google</span>
           </div>
-          <div className={styles.row}>
-            <span className={styles.rowLabel}>Plan</span>
-            <span className={styles.rowValue}>Free</span>
-          </div>
+          {account && (
+            <>
+              <div className={styles.row}>
+                <span className={styles.rowLabel}>Plan</span>
+                <span className={styles.rowValue}>{plan}</span>
+              </div>
+              <div className={styles.row}>
+                <span className={styles.rowLabel}>Member since</span>
+                <span className={styles.rowValue}>{since}</span>
+              </div>
+            </>
+          )}
+          {note && <p className={styles.note}>{note}</p>}
         </div>
 
         <form
