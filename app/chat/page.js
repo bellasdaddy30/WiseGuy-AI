@@ -213,14 +213,18 @@ export default function ChatPage() {
 
     rec.onerror = (e) => {
       setListening(false);
-      if (e.error === 'not-allowed') {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         continuousActiveRef.current = false;
         setAlwaysOn(false);
-        setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
-        setTimeout(() => setMicError(''), 6000);
+        const msg = srErrorMessage(e.error, detectIOS());
+        if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 6000); }
         return;
       }
-      // 'no-speech', 'aborted', network — just restart silently
+      // 'no-speech', 'aborted' — restart silently; other errors show a message
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        const msg = srErrorMessage(e.error, detectIOS());
+        if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 5000); }
+      }
       if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
     };
 
@@ -228,7 +232,7 @@ export default function ChatPage() {
       rec.start();
       recognitionRef.current = rec;
       setListening(true);
-    } catch {
+    } catch (err) {
       if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
     }
   }
@@ -270,12 +274,40 @@ export default function ChatPage() {
     }
   }
 
+  // Detects iOS/iPadOS including iPads that report a Mac user-agent in desktop mode
+  function detectIOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function srErrorMessage(error, isIOS) {
+    switch (error) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return isIOS
+          ? 'Mic blocked. Open Settings → Safari → Microphone, allow this site, then try again.'
+          : 'Mic blocked. Click the lock icon in your browser address bar and allow the microphone.';
+      case 'network':
+        return 'Voice input requires HTTPS — use the wiseguy-ai.vercel.app URL, not localhost.';
+      case 'audio-capture':
+        return 'Microphone not found or it\'s in use by another app.';
+      case 'no-speech':
+        return null; // not an error — user just didn't speak
+      default:
+        return `Voice error (${error}). Make sure you\'re in Safari on iOS with HTTPS.`;
+    }
+  }
+
   // startListening is defined here so the speech queue can call it after audio ends
   function startListening() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const isIOS = detectIOS();
+    const SR    = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setMicError('Voice input not supported in this browser.');
-      setTimeout(() => setMicError(''), 4000);
+      setMicError(isIOS
+        ? 'Voice input only works in Safari on iOS — open this page in Safari.'
+        : 'Voice input not supported in this browser.'
+      );
+      setTimeout(() => setMicError(''), 5000);
       return;
     }
     if (loadingRef.current) return;
@@ -284,8 +316,7 @@ export default function ChatPage() {
 
     // Create the SR instance synchronously while the user-gesture context is
     // still active. iOS Safari drops gesture context as soon as we go async,
-    // so rec.start() must be called either synchronously or from a non-promise
-    // code path on iOS.
+    // so rec.start() must be called synchronously on iOS.
     const rec = new SR();
     rec.continuous     = false;
     rec.interimResults = true;
@@ -306,13 +337,8 @@ export default function ChatPage() {
     };
     rec.onerror = (e) => {
       setListening(false);
-      if (e.error === 'not-allowed') {
-        setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
-        setTimeout(() => setMicError(''), 6000);
-      } else if (e.error === 'network') {
-        setMicError('Voice requires HTTPS — use the deployed URL, not localhost.');
-        setTimeout(() => setMicError(''), 4000);
-      }
+      const msg = srErrorMessage(e.error, isIOS);
+      if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 6000); }
     };
 
     function beginRecognition() {
@@ -320,28 +346,28 @@ export default function ChatPage() {
         rec.start();
         recognitionRef.current = rec;
         setListening(true);
-      } catch {
-        setMicError('Voice input not available in this browser.');
-        setTimeout(() => setMicError(''), 4000);
+      } catch (err) {
+        setMicError(isIOS
+          ? 'Mic failed to start. Make sure you\'re in Safari and the mic is allowed in Settings.'
+          : `Voice input failed to start: ${err?.message ?? 'unknown error'}`
+        );
+        setTimeout(() => setMicError(''), 6000);
       }
     }
 
-    // iOS Safari: skip getUserMedia — SR has its own permission system and
-    // calling getUserMedia first means rec.start() ends up in a promise callback
-    // where the gesture context is already gone, causing silent failure.
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // iOS/iPadOS: call rec.start() synchronously — the SR API handles its own
+    // permission flow and calling getUserMedia first breaks the gesture context.
     if (isIOS || !navigator.mediaDevices?.getUserMedia) {
       beginRecognition();
     } else {
-      // Android / Desktop Chrome: getUserMedia first to surface the permission dialog,
-      // then release the stream so SR can acquire the mic on its own.
+      // Android / Desktop: getUserMedia first to surface the browser permission dialog.
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
           stream.getTracks().forEach(t => t.stop());
           beginRecognition();
         })
         .catch(() => {
-          setMicError('Mic blocked. Check your browser microphone settings.');
+          setMicError('Mic blocked. Click the lock icon in your address bar and allow the microphone.');
           setTimeout(() => setMicError(''), 6000);
         });
     }

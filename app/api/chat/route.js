@@ -18,8 +18,8 @@ function describeError(err, providerLabel) {
 }
 
 function creativityToTemp(c) {
-  // creativity 1–5 → temperature 0.4–1.3
-  return [0.4, 0.65, 0.85, 1.05, 1.3][(c ?? 3) - 1] ?? 0.85;
+  // creativity 1–4 → temperature 0.4–1.05 (capped; 5 from old stored data → 1.05)
+  return [0.4, 0.65, 0.85, 1.05][Math.min((c ?? 3), 4) - 1] ?? 0.85;
 }
 
 const MAX_MESSAGES    = 100;
