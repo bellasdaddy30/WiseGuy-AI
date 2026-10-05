@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import {
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ORPHEUS_KEY,
-  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ORPHEUS_VOICE,
-  GOOGLE_VOICES, ORPHEUS_VOICES,
+  TTS_PROVIDER_KEY,
+  TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
+  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
@@ -14,9 +15,11 @@ import { getMemory, addMemoryItem, removeMemoryItem, clearMemory, MEMORY_KEY } f
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
-  { id: 'browser',  label: 'Browser',  desc: 'Built-in. Free, works everywhere. Basic quality.' },
-  { id: 'google',   label: 'Google',   desc: 'High quality. Free via your Gemini API key.' },
-  { id: 'orpheus',  label: 'Orpheus',  desc: 'Emotion-reactive. Free via your Groq API key.' },
+  { id: 'browser',    label: 'Browser',    desc: 'Built-in. Free, works everywhere. Basic quality.' },
+  { id: 'google',     label: 'Google',     desc: 'High quality. Free via your Gemini API key.' },
+  { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Premium voices. Each persona gets its own voice. Needs ELEVENLABS_API_KEY.' },
+  { id: 'openai',     label: 'OpenAI',     desc: 'High quality. Needs OPENAI_API_KEY.' },
+  { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.' },
 ];
 
 const VOICE_MODES = [
@@ -36,6 +39,9 @@ function save(key, value) {
 export default function SettingsPage() {
   const [ttsProvider, setTtsProvider] = useState(DEFAULT_TTS_PROVIDER);
   const [googleVoice, setGoogleVoice] = useState(DEFAULT_GOOGLE_VOICE);
+  const [elVoice,     setElVoice]     = useState(DEFAULT_ELEVENLABS_VOICE);
+  const [elVoices,    setElVoices]    = useState(ELEVENLABS_VOICES);
+  const [oaVoice,     setOaVoice]     = useState(DEFAULT_OPENAI_VOICE);
   const [orVoice,     setOrVoice]     = useState(DEFAULT_ORPHEUS_VOICE);
   const [aiVoice,     setAiVoice]     = useState(true);
   const [voiceMode,   setVoiceMode]   = useState('off');
@@ -49,19 +55,39 @@ export default function SettingsPage() {
   const [memInput,    setMemInput]    = useState('');
   const [memCleared,  setMemCleared]  = useState(false);
 
+  function fetchElVoices() {
+    fetch('/api/elevenlabs-voices')
+      .then(r => r.json())
+      .then(data => {
+        if (data.voices?.length) {
+          setElVoices(data.voices);
+          setElVoice(prev =>
+            data.voices.some(v => v.id === prev) ? prev : data.voices[0].id
+          );
+        }
+      })
+      .catch(() => {});
+  }
+
   useEffect(() => {
     setMemoryItems(getMemory());
-    setTtsProvider(load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER));
+    const tp = load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER);
+    setTtsProvider(tp);
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
+    setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
+    setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
+    if (tp === 'elevenlabs') fetchElVoices();
   }, []);
 
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
     save(TTS_VOICE_GOOGLE_KEY, googleVoice);
+    save(TTS_VOICE_ELEVENLABS_KEY, elVoice);
+    save(TTS_VOICE_OPENAI_KEY, oaVoice);
     save(TTS_VOICE_ORPHEUS_KEY, orVoice);
     save(AI_VOICE_KEY, aiVoice);
     if (voiceMode === 'handsfree') {
@@ -89,6 +115,8 @@ export default function SettingsPage() {
     try {
       localStorage.removeItem(TTS_PROVIDER_KEY);
       localStorage.removeItem(TTS_VOICE_GOOGLE_KEY);
+      localStorage.removeItem(TTS_VOICE_ELEVENLABS_KEY);
+      localStorage.removeItem(TTS_VOICE_OPENAI_KEY);
       localStorage.removeItem(TTS_VOICE_ORPHEUS_KEY);
       localStorage.removeItem(AI_VOICE_KEY);
       localStorage.removeItem(VOICE_MODE_KEY);
@@ -99,6 +127,8 @@ export default function SettingsPage() {
     setResetConfirm(false);
     setTtsProvider(DEFAULT_TTS_PROVIDER);
     setGoogleVoice(DEFAULT_GOOGLE_VOICE);
+    setElVoice(DEFAULT_ELEVENLABS_VOICE);
+    setOaVoice(DEFAULT_OPENAI_VOICE);
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
     setAiVoice(true);
     setVoiceMode('off');
@@ -124,9 +154,14 @@ export default function SettingsPage() {
     setTimeout(() => setMemCleared(false), 3000);
   }
 
-  const voiceMap     = { google: googleVoice, orpheus: orVoice };
-  const voiceSetters = { google: setGoogleVoice, orpheus: setOrVoice };
-  const voiceLists   = { google: GOOGLE_VOICES, orpheus: ORPHEUS_VOICES };
+  function handleProviderChange(id) {
+    setTtsProvider(id);
+    if (id === 'elevenlabs') fetchElVoices();
+  }
+
+  const voiceMap     = { google: googleVoice, elevenlabs: elVoice, openai: oaVoice, orpheus: orVoice };
+  const voiceSetters = { google: setGoogleVoice, elevenlabs: setElVoice, openai: setOaVoice, orpheus: setOrVoice };
+  const voiceLists   = { google: GOOGLE_VOICES, elevenlabs: elVoices, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
 
   return (
     <main className={styles.page}>
@@ -142,7 +177,7 @@ export default function SettingsPage() {
             <button
               key={p.id}
               className={`${styles.providerCard} ${ttsProvider === p.id ? styles.active : ''}`}
-              onClick={() => setTtsProvider(p.id)}
+              onClick={() => handleProviderChange(p.id)}
             >
               <span className={styles.providerName}>{p.label}</span>
               <span className={styles.providerDesc}>{p.desc}</span>
