@@ -19,6 +19,7 @@ import {
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
 import { DEFAULT_VOICE_FX, loadVoiceFx, browserVoiceParams, playTuned } from '../../lib/voicefx';
+import { canRecord, isIOS, isStandalone, openMic, closeMic, recordUtterance, transcribe } from '../../lib/micRecorder';
 import styles from './chat.module.css';
 
 const ERROR_REPLY = "The AI service isn't responding right now.";
@@ -81,6 +82,9 @@ export default function ChatPage() {
   const micMutedRef         = useRef(false);
   const continuousActiveRef = useRef(false);
   const submitTextRef       = useRef(null);
+  // Recorder-based voice input (see lib/micRecorder.js)
+  const micStreamRef        = useRef(null);
+  const srBrokenRef         = useRef(false); // Safari speech recognition refused; use the recorder
 
   useEffect(() => { voiceModeRef.current     = voiceMode;   }, [voiceMode]);
   useEffect(() => { aiVoiceRef.current       = aiVoice;     }, [aiVoice]);
@@ -95,6 +99,13 @@ export default function ChatPage() {
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
   useEffect(() => { alwaysOnRef.current      = alwaysOn;   }, [alwaysOn]);
   useEffect(() => { micMutedRef.current      = micMuted;   }, [micMuted]);
+
+  // Release the microphone when leaving the page.
+  useEffect(() => () => {
+    recognitionRef.current?.abort?.();
+    closeMic(micStreamRef.current);
+    micStreamRef.current = null;
+  }, []);
 
   useEffect(() => {
     // Load conversation history
@@ -188,6 +199,17 @@ export default function ChatPage() {
       return;
     }
 
+    if (shouldRecord()) {
+      // Don't record the AI's own voice: wait until it has finished speaking.
+      if (speechRef.current) { setTimeout(() => runContinuousListening(), 400); return; }
+      startRecorderListening({ continuous: true }).then(ok => {
+        if (ok !== false && continuousActiveRef.current && !micMutedRef.current) {
+          setTimeout(() => runContinuousListening(), 300);
+        }
+      });
+      return;
+    }
+
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
@@ -224,6 +246,13 @@ export default function ChatPage() {
 
     rec.onerror = (e) => {
       setListening(false);
+      if ((e.error === 'not-allowed' || e.error === 'service-not-allowed') && canRecord() && !srBrokenRef.current) {
+        // Safari refused (Home Screen app, or a restart without a tap).
+        // Switch to the recorder and keep going instead of giving up.
+        srBrokenRef.current = true;
+        if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 300);
+        return;
+      }
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         continuousActiveRef.current = false;
         setAlwaysOn(false);
@@ -266,10 +295,12 @@ export default function ChatPage() {
       runContinuousListening();
     } else {
       continuousActiveRef.current = false;
-      recognitionRef.current?.stop();
+      recognitionRef.current?.abort?.();
       setListening(false);
       setMicMuted(false);
       micMutedRef.current = false;
+      closeMic(micStreamRef.current);
+      micStreamRef.current = null;
     }
   }
 
@@ -278,7 +309,7 @@ export default function ChatPage() {
     setMicMuted(next);
     micMutedRef.current = next;
     if (next) {
-      recognitionRef.current?.stop();
+      recognitionRef.current?.abort?.();
       setListening(false);
     } else {
       runContinuousListening();
@@ -310,8 +341,72 @@ export default function ChatPage() {
   }
 
   // startListening is defined here so the speech queue can call it after audio ends
-  function startListening() {
+  // Safari's speech recognition can't be used in an iPhone Home Screen app,
+  // and isn't in every browser. In those cases record and transcribe instead.
+  function shouldRecord() {
+    if (!canRecord()) return false;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return !SR || srBrokenRef.current || (isIOS() && isStandalone());
+  }
+
+  // Record one utterance, transcribe it, and (in auto / hands-free / always-on)
+  // send it. Returns false when the mic can't be opened at all.
+  async function startRecorderListening({ continuous = false } = {}) {
+    if (loadingRef.current) return true;
+    if (!continuous) stopAudio();
+    setMicError('');
+    unlockAudioContext();
+    const ctx = audioCtxRef.current;
+
+    let stream = micStreamRef.current;
+    if (!stream || stream.getAudioTracks().every(t => t.readyState === 'ended')) {
+      try {
+        stream = await openMic();
+        micStreamRef.current = stream;
+      } catch {
+        setMicError(detectIOS()
+          ? 'Mic blocked. iPhone Settings → Privacy & Security → Microphone, and Settings → Safari → Microphone → Allow. Then reload.'
+          : 'Mic blocked. Click the lock icon in your address bar and allow the microphone.');
+        setTimeout(() => setMicError(''), 8000);
+        if (continuous) { continuousActiveRef.current = false; setAlwaysOn(false); }
+        return false;
+      }
+    }
+
+    const handle = recordUtterance(stream, ctx, { noSpeechMs: continuous ? 15000 : 8000 });
+    recognitionRef.current = handle;
+    setListening(true);
+    const blob = await handle.promise;
+    if (recognitionRef.current === handle) recognitionRef.current = null;
+    setListening(false);
+
+    // One-off tap: let go of the mic so the recording indicator goes away.
+    const keepOpen = continuous || handsFreeModeRef.current;
+    if (!keepOpen) { closeMic(micStreamRef.current); micStreamRef.current = null; }
+    if (!blob) return true;
+
+    setInput('Transcribing…');
+    let text = '';
+    try {
+      text = await transcribe(blob);
+    } catch (err) {
+      setInput('');
+      setMicError(err.message);
+      setTimeout(() => setMicError(''), 6000);
+      return true;
+    }
+    if (text && (continuous || voiceModeRef.current === 'auto' || handsFreeModeRef.current)) {
+      setInput('');
+      (submitTextRef.current ?? submitText)(text);
+    } else {
+      setInput(text);
+    }
+    return true;
+  }
+
+  function startListening({ auto = false } = {}) {
     const isIOS = detectIOS();
+    if (shouldRecord()) { startRecorderListening(); return; }
     const SR    = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       setMicError(isIOS
@@ -348,6 +443,15 @@ export default function ChatPage() {
     };
     rec.onerror = (e) => {
       setListening(false);
+      if ((e.error === 'service-not-allowed' || (auto && e.error === 'not-allowed')) && canRecord()) {
+        // Safari refused speech recognition. That is not a mic-permission
+        // problem, so switch to recording instead of blaming the permission.
+        srBrokenRef.current = true;
+        if (auto) { startRecorderListening(); return; }
+        setMicError('Switched to cloud voice input. Tap the mic again.');
+        setTimeout(() => setMicError(''), 5000);
+        return;
+      }
       const msg = srErrorMessage(e.error, isIOS);
       if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 6000); }
     };
@@ -388,10 +492,10 @@ export default function ChatPage() {
   // Each finished sentence is sent to the voice as soon as it streams in, so
   // audio starts while the rest of the reply is still being written. Chunks
   // are fetched in parallel but always played in order.
-  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000, openai: 2000 };
+  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000, openai: 2000, orpheus: 800 };
   const FIRST_CHUNK_MIN = 1;    // speak the first sentence immediately
   // Then batch sentences to limit API calls (Google's free voice quota is small).
-  const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, openai: 300, browser: 200 };
+  const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, openai: 300, orpheus: 150, browser: 200 };
   // After a quota/rate error, skip that provider for a while and use the browser voice.
   const VOICE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -456,6 +560,11 @@ export default function ChatPage() {
         if (res.status === 429) {
           voiceCooldownRef.current[provider] = Date.now() + VOICE_COOLDOWN_MS;
           return { error: errData.error || 'Voice limit reached — using the browser voice.', fallback: true };
+        }
+        if (res.status === 403 && errData.locked) {
+          // Admin-only voice and this browser isn't unlocked: stop asking for it.
+          voiceCooldownRef.current[provider] = Date.now() + 24 * 60 * 60 * 1000;
+          return { error: errData.error, fallback: true };
         }
         return { error: errData.error || `Voice error ${res.status}` };
       }
@@ -559,7 +668,7 @@ export default function ChatPage() {
 
     let fullResponse = '';
     // In hands-free mode, start listening again once the AI finishes speaking.
-    const afterSpeech = () => { if (handsFreeModeRef.current) startListening(); };
+    const afterSpeech = () => { if (handsFreeModeRef.current) startListening({ auto: true }); };
     const speech = startSpeech(afterSpeech);
 
     try {
@@ -633,7 +742,7 @@ export default function ChatPage() {
 
   function startNewChat() {
     stopAudio();
-    recognitionRef.current?.stop();
+    recognitionRef.current?.abort?.();
     convIdRef.current      = makeConvId();
     convCreatedRef.current = Date.now();
     setMessages([{ role: 'assistant', content: "Oh good, you're here. Ask me something." }]);
@@ -643,7 +752,7 @@ export default function ChatPage() {
 
   function loadConv(conv) {
     stopAudio();
-    recognitionRef.current?.stop();
+    recognitionRef.current?.abort?.();
     convIdRef.current      = conv.id;
     convCreatedRef.current = conv.created;
     setMessages(conv.messages);
@@ -755,7 +864,9 @@ export default function ChatPage() {
       startListening();
     } else {
       stopAudio();
-      recognitionRef.current?.stop();
+      recognitionRef.current?.abort?.();
+      closeMic(micStreamRef.current);
+      micStreamRef.current = null;
     }
     setHandsFree(next);
     try { localStorage.setItem(HANDS_FREE_KEY, String(next)); } catch {}

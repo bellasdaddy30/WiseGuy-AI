@@ -17,6 +17,7 @@ import {
   VOICE_FX_KEY, VOICE_FX_PRESETS, EQ_BANDS, EQ_RANGE_DB, PITCH_RANGE, VOLUME_MAX, SPEED_MIN, SPEED_MAX,
   normalizeVoiceFx, loadVoiceFx, saveVoiceFx, matchingPreset, browserVoiceParams, playTuned,
 } from '../../lib/voicefx';
+import { SAMPLE_MIN, SAMPLE_MAX, DESCRIPTION_MAX } from '../../lib/voiceDesign';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
@@ -27,7 +28,6 @@ const TTS_PROVIDERS = [
   { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.', adminOnly: true },
 ];
 
-const ADMIN_KEY = 'adminUnlocked';
 
 const VOICE_MODES = [
   { id: 'off',       label: 'Off',          desc: 'No voice. Text only.' },
@@ -109,7 +109,8 @@ export default function SettingsPage() {
   const [dvAge,            setDvAge]            = useState('middle_aged');
   const [dvAccent,         setDvAccent]         = useState('american');
   const [dvAccentStrength, setDvAccentStrength] = useState(1.0);
-  const [dvText,           setDvText]           = useState('Hey there — WiseGuy AI at your service. How can I help you today?');
+  const [dvDescription,    setDvDescription]    = useState('');
+  const [dvText,           setDvText]           = useState("Hey there — WiseGuy AI at your service. Ask me anything you want, and I'll give you a straight answer, whether you like it or not.");
   const [dvGenerating,     setDvGenerating]     = useState(false);
   const [dvAudioUrl,       setDvAudioUrl]       = useState(null);
   const [dvVoiceId,        setDvVoiceId]        = useState(null);
@@ -146,13 +147,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMemoryItems(getMemory());
-    const isUnlocked = load(ADMIN_KEY, '') === '1';
-    setAdminUnlocked(isUnlocked);
     const tp = load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER);
-    // If a locked provider is stored but admin isn't unlocked, fall back to browser
-    const resolvedTp = (!isUnlocked && TTS_PROVIDERS.find(p => p.id === tp)?.adminOnly)
-      ? DEFAULT_TTS_PROVIDER : tp;
-    setTtsProvider(resolvedTp);
+    setTtsProvider(tp);
+    // The server decides who is admin (signed cookie). Until it answers,
+    // locked voices stay hidden; if it says no, fall back to the default.
+    fetch('/api/admin-unlock')
+      .then(r => r.json())
+      .then(d => {
+        setAdminUnlocked(!!d.admin);
+        if (!d.admin && TTS_PROVIDERS.find(p => p.id === tp)?.adminOnly) setTtsProvider(DEFAULT_TTS_PROVIDER);
+        else if (d.admin && tp === 'elevenlabs') fetchElVoices();
+      })
+      .catch(() => {});
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
     setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
@@ -162,7 +168,6 @@ export default function SettingsPage() {
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
-    if (resolvedTp === 'elevenlabs') fetchElVoices();
   }, []);
 
   // FIX: stop any preview audio when leaving the Settings page,
@@ -444,7 +449,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/elevenlabs-design', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gender: dvGender, age: dvAge, accent: dvAccent, accent_strength: dvAccentStrength, text: dvText }),
+        body: JSON.stringify({ description: dvDescription, gender: dvGender, age: dvAge, accent: dvAccent, accent_strength: dvAccentStrength, text: dvText }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -471,7 +476,11 @@ export default function SettingsPage() {
       const res = await fetch('/api/elevenlabs-save-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice_name: dvName, generated_voice_id: dvVoiceId }),
+        // The same description the preview was made from (ElevenLabs needs it to save)
+        body: JSON.stringify({
+          voice_name: dvName, generated_voice_id: dvVoiceId,
+          description: dvDescription, gender: dvGender, age: dvAge, accent: dvAccent, accent_strength: dvAccentStrength,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -563,8 +572,20 @@ export default function SettingsPage() {
             {dvOpen && (
               <div className={styles.designBody}>
                 <p className={styles.designNote}>
-                  Requires an ElevenLabs Creator plan. Designed voices are saved to your account and show up in the list above.
+                  Needs a paid ElevenLabs plan. Designed voices are saved to your ElevenLabs account and show up in the list above.
                 </p>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Describe the voice (optional — overrides the buttons below)</span>
+                  <textarea
+                    className={styles.designTextarea}
+                    rows={3}
+                    value={dvDescription}
+                    onChange={e => { setDvDescription(e.target.value); setDvVoiceId(null); }}
+                    maxLength={DESCRIPTION_MAX}
+                    placeholder="e.g. A gravelly, sarcastic man in his 40s from Brooklyn, fast talker, smirking delivery"
+                  />
+                </div>
 
                 <div className={styles.designRow}>
                   <span className={styles.designLabel}>Gender</span>
@@ -613,20 +634,22 @@ export default function SettingsPage() {
                 </div>
 
                 <div className={styles.designRow}>
-                  <span className={styles.designLabel}>Sample Text</span>
+                  <span className={styles.designLabel}>
+                    Sample Text — {dvText.trim().length}/{SAMPLE_MIN} min
+                  </span>
                   <textarea
                     className={styles.designTextarea}
-                    rows={2}
+                    rows={3}
                     value={dvText}
                     onChange={e => setDvText(e.target.value)}
-                    maxLength={500}
+                    maxLength={SAMPLE_MAX}
                   />
                 </div>
 
                 <button
                   className={styles.designGenBtn}
                   onClick={handleDesignGenerate}
-                  disabled={dvGenerating || !dvText.trim()}
+                  disabled={dvGenerating || dvText.trim().length < SAMPLE_MIN}
                 >
                   {dvGenerating ? 'Generating…' : 'Generate Preview'}
                 </button>
@@ -853,11 +876,11 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Admin unlock — hidden when no ADMIN_PIN env var is set on the server */}
+      {/* Admin unlock — the server checks the PIN and sets a signed cookie */}
       <div className={styles.adminRow}>
         {adminUnlocked ? (
           <button className={styles.adminBtn} onClick={() => {
-            save(ADMIN_KEY, '');
+            fetch('/api/admin-unlock', { method: 'DELETE' }).catch(() => {});
             setAdminUnlocked(false);
             if (TTS_PROVIDERS.find(p => p.id === ttsProvider)?.adminOnly) {
               setTtsProvider(DEFAULT_TTS_PROVIDER);
@@ -875,12 +898,12 @@ export default function SettingsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pin }),
               });
-              const data = await res.json();
+              const data = await res.json().catch(() => ({}));
               if (data.granted) {
-                save(ADMIN_KEY, '1');
                 setAdminUnlocked(true);
+                if (ttsProvider === 'elevenlabs') fetchElVoices();
               } else {
-                window.alert('Incorrect PIN.');
+                window.alert(data.error || 'Incorrect PIN.');
               }
             } catch {
               window.alert('Could not reach server. Try again.');

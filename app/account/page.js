@@ -10,7 +10,7 @@ export default async function AccountPage() {
         <div className={styles.card}>
           <h1 className={styles.title}>Sign In</h1>
           <p className={styles.subtitle}>
-            Sign in to save your settings and conversation history across devices.
+            Sign in with Google. Your settings and chat history are saved on this device; syncing them across devices is coming soon.
           </p>
           <form
             action={async () => {

@@ -1,4 +1,8 @@
-export async function GET() {
+import { isAdmin } from '../../../lib/adminAuth';
+
+export async function GET(request) {
+  // Lists the owner's own (designed/cloned) voices, so it is admin-only too.
+  if (!isAdmin(request)) return Response.json({ voices: [] });
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return Response.json({ voices: [] });
 

@@ -1,10 +1,12 @@
 import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG, PERSONA_ELEVENLABS_VOICE } from '../../../lib/tts';
 import { getApiKey } from '../../../lib/providers';
 import { trimTrailingBurst } from '../../../lib/pcmTail';
+import { isAdmin, adminRequired } from '../../../lib/adminAuth';
+import { isTtsAdminOnly } from '../../../lib/premium';
 
 export const maxDuration = 30;
 
-// Fade the first and last 5ms of 16-bit LE PCM to silence to prevent click artifacts
+// Fade the first and last 20 ms (fadeSecs) of 16-bit LE PCM to silence to prevent click artifacts
 function applyFades(pcm, sampleRate, fadeSecs = 0.02) {
   // Ensure byte-aligned to 16-bit samples
   const buf = pcm.length % 2 === 0 ? pcm : pcm.slice(0, -1);
@@ -151,7 +153,9 @@ async function elevenLabsTts(rawText, voiceId, persona) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const code = body?.detail?.code ?? '';
+    // ElevenLabs puts the error name in detail.status (e.g. "quota_exceeded");
+    // some responses use detail.code. Accept either.
+    const code = body?.detail?.status ?? body?.detail?.code ?? '';
     console.error('[tts/elevenlabs]', res.status, code);
     if (res.status === 402 || code === 'paid_plan_required') {
       return Response.json({ error: 'That ElevenLabs voice requires a paid plan. Switch to Google or Browser TTS, or pick a different voice.' }, { status: 502 });
@@ -226,38 +230,99 @@ function injectOrpheusEmotions(text, persona) {
   ).join('');
 }
 
+// Groq's Orpheus accepts at most 200 characters per request, so longer text
+// is cut at sentence (then word) boundaries and the clips are joined.
+const ORPHEUS_MAX_CHARS = 200;
+
+function splitForOrpheus(text, limit = ORPHEUS_MAX_CHARS) {
+  const pieces = [];
+  let cur = '';
+  const push = () => { if (cur.trim()) pieces.push(cur.trim()); cur = ''; };
+  for (const sentence of text.match(/[^.!?]+[.!?]*\s*/g) ?? [text]) {
+    if ((cur + sentence).trim().length <= limit) { cur += sentence; continue; }
+    push();
+    if (sentence.trim().length <= limit) { cur = sentence; continue; }
+    for (const word of sentence.split(/\s+/)) {           // one very long sentence
+      if (!word) continue;
+      if ((cur + ' ' + word).trim().length > limit) push();
+      cur = cur ? `${cur} ${word.slice(0, limit)}` : word.slice(0, limit);
+    }
+  }
+  push();
+  return pieces;
+}
+
+// Pulls the PCM samples and format out of a WAV file.
+function readWav(buf) {
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let pos = 12, rate = 24000, channels = 1, bits = 16;
+  while (pos + 8 <= buf.length) {
+    const id   = String.fromCharCode(buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]);
+    const size = view.getUint32(pos + 4, true);
+    if (id === 'fmt ') {
+      channels = view.getUint16(pos + 10, true);
+      rate     = view.getUint32(pos + 12, true);
+      bits     = view.getUint16(pos + 22, true);
+    } else if (id === 'data') {
+      // Streamed WAVs can carry a bogus size; take what is actually there.
+      const len = Math.min(size, buf.length - pos - 8);
+      return { pcm: buf.subarray(pos + 8, pos + 8 + len), rate, channels, bits };
+    }
+    pos += 8 + size + (size % 2);
+  }
+  return null;
+}
+
 async function orpheusTts(text, voice, persona) {
   const apiKey = getApiKey('groq');
   if (!apiKey) {
     return Response.json({ error: 'Groq key not set. Add GROQ_API_KEY to .env.local.' }, { status: 500 });
   }
 
-  const enhanced = injectOrpheusEmotions(text, persona);
+  const pieces = splitForOrpheus(injectOrpheusEmotions(text, persona)).slice(0, 12);
+  const clips = [];
+  for (const input of pieces) {   // one at a time: Groq's free tier has a low request rate
+    const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'canopylabs/orpheus-v1-english',
+        voice: voice || 'tara',
+        input,
+        response_format: 'wav',
+      }),
+    });
 
-  const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'canopylabs/orpheus-v1-english',
-      voice: voice || 'tara',
-      input: enhanced,
-      response_format: 'wav',
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    console.error('[tts/orpheus]', res.status, JSON.stringify(body).slice(0, 200));
-    if (res.status === 429) {
-      return Response.json({ error: 'Orpheus rate limited — try again in a moment.' }, { status: 429 });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.error('[tts/orpheus]', res.status, JSON.stringify(body).slice(0, 200));
+      if (res.status === 429) {
+        return Response.json({ error: 'Orpheus rate limited — try again in a moment.' }, { status: 429 });
+      }
+      return Response.json({ error: `Orpheus TTS error ${res.status}.` }, { status: 502 });
     }
-    return Response.json({ error: `Orpheus TTS error ${res.status}.` }, { status: 502 });
+    clips.push(new Uint8Array(await res.arrayBuffer()));
   }
 
-  return new Response(res.body, { headers: { 'Content-Type': 'audio/wav' } });
+  if (clips.length === 1) return new Response(clips[0], { headers: { 'Content-Type': 'audio/wav' } });
+
+  const parsed = clips.map(readWav);
+  const first  = parsed[0];
+  const same   = first && parsed.every(w => w && w.rate === first.rate && w.channels === first.channels && w.bits === first.bits);
+  if (!same) {
+    console.error('[tts/orpheus] could not join clips; returning the first one');
+    return new Response(clips[0], { headers: { 'Content-Type': 'audio/wav' } });
+  }
+  const total  = parsed.reduce((n, w) => n + w.pcm.length, 0);
+  const header = buildWavHeader(total, first.rate, first.channels, first.bits);
+  const wav    = new Uint8Array(header.length + total);
+  wav.set(header);
+  let off = header.length;
+  for (const w of parsed) { wav.set(w.pcm, off); off += w.pcm.length; }
+  return new Response(wav, { headers: { 'Content-Type': 'audio/wav' } });
 }
 
 const MAX_TTS_CHARS = 4000;
@@ -275,6 +340,10 @@ export async function POST(request) {
   if (text.length > MAX_TTS_CHARS) {
     return Response.json({ error: `Text too long for TTS (${text.length} chars, max ${MAX_TTS_CHARS}).` }, { status: 400 });
   }
+
+  // Paid / shared-quota voices are the owner's only. Checked here on the
+  // server — hiding the buttons in Settings is not enough.
+  if (isTtsAdminOnly(provider) && !isAdmin(request)) return adminRequired();
 
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);

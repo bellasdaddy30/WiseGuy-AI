@@ -8,7 +8,6 @@ import styles from './paid.module.css';
 const TTS_ENGINES = [
   { id: 'browser', label: 'Browser TTS', desc: 'Built-in. Free, works everywhere.',      pro: false },
   { id: 'google',  label: 'Google TTS',  desc: 'High quality. Free via Gemini key.',     pro: false },
-  { id: 'orpheus', label: 'Orpheus TTS', desc: 'Emotion-reactive. Free via Groq key.',   pro: false },
 ];
 
 export default function PaidPage() {
