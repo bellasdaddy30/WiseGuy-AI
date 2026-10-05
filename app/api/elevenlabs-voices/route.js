@@ -13,10 +13,11 @@ export async function GET() {
     const ORDER = { professional: 0, premade: 1, cloned: 2, generated: 3 };
     const voices = (data.voices ?? [])
       .map(v => ({
-        id:       v.voice_id,
-        name:     v.name,
-        category: v.category ?? 'premade',
-        labels:   v.labels ?? {},
+        id:          v.voice_id,
+        name:        v.name,
+        category:    v.category ?? 'premade',
+        labels:      v.labels ?? {},
+        preview_url: v.preview_url ?? null,
       }))
       .sort((a, b) => {
         const catDiff = (ORDER[a.category] ?? 9) - (ORDER[b.category] ?? 9);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   TTS_PROVIDER_KEY,
   TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
@@ -45,6 +45,26 @@ export default function SettingsPage() {
   const [orVoice,     setOrVoice]     = useState(DEFAULT_ORPHEUS_VOICE);
   const [aiVoice,     setAiVoice]     = useState(true);
   const [voiceMode,   setVoiceMode]   = useState('off');
+
+  // Voice demo
+  const [playingDemo, setPlayingDemo] = useState(null);
+  const demoAudioRef = useRef(null);
+
+  // Design a Voice
+  const [dvOpen,           setDvOpen]           = useState(false);
+  const [dvGender,         setDvGender]         = useState('male');
+  const [dvAge,            setDvAge]            = useState('middle_aged');
+  const [dvAccent,         setDvAccent]         = useState('american');
+  const [dvAccentStrength, setDvAccentStrength] = useState(1.0);
+  const [dvText,           setDvText]           = useState('Hey there — WiseGuy AI at your service. How can I help you today?');
+  const [dvGenerating,     setDvGenerating]     = useState(false);
+  const [dvAudioUrl,       setDvAudioUrl]       = useState(null);
+  const [dvVoiceId,        setDvVoiceId]        = useState(null);
+  const [dvName,           setDvName]           = useState('');
+  const [dvSaving,         setDvSaving]         = useState(false);
+  const [dvSaved,          setDvSaved]          = useState(false);
+  const [dvError,          setDvError]          = useState('');
+
   const [clearConfirm, setClearConfirm] = useState(false);
   const [cleared,      setCleared]      = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -154,6 +174,103 @@ export default function SettingsPage() {
     setTimeout(() => setMemCleared(false), 3000);
   }
 
+  // ── Voice demo ──────────────────────────────────────────────────────
+  function stopDemo() {
+    if (demoAudioRef.current) { demoAudioRef.current.pause(); demoAudioRef.current = null; }
+    window.speechSynthesis?.cancel();
+    setPlayingDemo(null);
+  }
+
+  async function playDemo(voiceId, provider, previewUrl) {
+    if (playingDemo === voiceId) { stopDemo(); return; }
+    stopDemo();
+    setPlayingDemo(voiceId);
+    try {
+      if (provider === 'browser') {
+        const utt = new SpeechSynthesisUtterance('Hey there — WiseGuy AI at your service.');
+        utt.onend = utt.onerror = () => setPlayingDemo(null);
+        window.speechSynthesis.speak(utt);
+        return;
+      }
+      let url = previewUrl;
+      if (!url) {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'Hey there — WiseGuy AI at your service.', provider, voice: voiceId }),
+        });
+        if (!res.ok) { setPlayingDemo(null); return; }
+        const blob = new Blob([await res.arrayBuffer()], { type: res.headers.get('Content-Type') || 'audio/mpeg' });
+        url = URL.createObjectURL(blob);
+      }
+      const audio = new Audio(url);
+      demoAudioRef.current = audio;
+      audio.onended = audio.onerror = () => { setPlayingDemo(null); if (!previewUrl) URL.revokeObjectURL(url); };
+      audio.play().catch(() => setPlayingDemo(null));
+    } catch { setPlayingDemo(null); }
+  }
+
+  // ── Design a Voice ──────────────────────────────────────────────────
+  async function handleDesignGenerate() {
+    setDvGenerating(true);
+    setDvError('');
+    if (dvAudioUrl) URL.revokeObjectURL(dvAudioUrl);
+    setDvAudioUrl(null);
+    setDvVoiceId(null);
+    try {
+      const res = await fetch('/api/elevenlabs-design', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gender: dvGender, age: dvAge, accent: dvAccent, accent_strength: dvAccentStrength, text: dvText }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setDvError(err.error || 'Generation failed.');
+        return;
+      }
+      const generatedId = res.headers.get('X-Generated-Voice-Id') || '';
+      const blob = new Blob([await res.arrayBuffer()], { type: 'audio/mpeg' });
+      setDvAudioUrl(URL.createObjectURL(blob));
+      setDvVoiceId(generatedId);
+    } catch (err) {
+      setDvError(err.message || 'Something went wrong.');
+    } finally {
+      setDvGenerating(false);
+    }
+  }
+
+  async function handleDesignSave() {
+    if (!dvVoiceId || !dvName.trim()) return;
+    setDvSaving(true);
+    setDvError('');
+    setDvSaved(false);
+    try {
+      const res = await fetch('/api/elevenlabs-save-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice_name: dvName, generated_voice_id: dvVoiceId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setDvError(err.error || 'Save failed.');
+        return;
+      }
+      const data = await res.json();
+      setDvSaved(true);
+      // Refresh voices and auto-select the new one
+      const updated = await fetch('/api/elevenlabs-voices').then(r => r.json()).catch(() => ({}));
+      if (updated.voices?.length) {
+        setElVoices(updated.voices);
+        setElVoice(data.voice_id);
+      }
+      setTimeout(() => setDvSaved(false), 4000);
+    } catch (err) {
+      setDvError(err.message || 'Something went wrong.');
+    } finally {
+      setDvSaving(false);
+    }
+  }
+
   function handleProviderChange(id) {
     setTtsProvider(id);
     if (id === 'elevenlabs') fetchElVoices();
@@ -186,19 +303,136 @@ export default function SettingsPage() {
         </div>
 
         {ttsProvider !== 'browser' && (
-          <div className={styles.voiceRow}>
-            <label className={styles.voiceLabel}>
-              {TTS_PROVIDERS.find(p => p.id === ttsProvider)?.label} Voice
-            </label>
-            <select
-              className={styles.select}
-              value={voiceMap[ttsProvider]}
-              onChange={e => voiceSetters[ttsProvider](e.target.value)}
-            >
-              {voiceLists[ttsProvider]?.map(v => (
-                <option key={v.id} value={v.id}>{v.name}</option>
-              ))}
-            </select>
+          <div className={styles.voiceList}>
+            {(voiceLists[ttsProvider] ?? []).map(v => (
+              <button
+                key={v.id}
+                className={`${styles.voiceItem} ${voiceMap[ttsProvider] === v.id ? styles.voiceActive : ''}`}
+                onClick={() => voiceSetters[ttsProvider](v.id)}
+              >
+                <span className={styles.voiceName}>{v.name}</span>
+                <span
+                  role="button"
+                  className={`${styles.previewBtn} ${playingDemo === v.id ? styles.previewPlaying : ''}`}
+                  onClick={e => { e.stopPropagation(); playDemo(v.id, ttsProvider, v.preview_url ?? null); }}
+                >
+                  {playingDemo === v.id ? '■ Stop' : '▶ Preview'}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {ttsProvider === 'elevenlabs' && (
+          <div className={styles.designSection}>
+            <button className={styles.designHeader} onClick={() => setDvOpen(o => !o)}>
+              <span className={styles.designTitle}>✦ Design Your Own Voice</span>
+              <span className={styles.designChevron}>{dvOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {dvOpen && (
+              <div className={styles.designBody}>
+                <p className={styles.designNote}>
+                  Requires an ElevenLabs Creator plan. Designed voices are saved to your account and show up in the list above.
+                </p>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Gender</span>
+                  <div className={styles.designOptions}>
+                    {['male', 'female'].map(g => (
+                      <button key={g}
+                        className={`${styles.designOption} ${dvGender === g ? styles.designOptionActive : ''}`}
+                        onClick={() => setDvGender(g)}
+                      >{g[0].toUpperCase() + g.slice(1)}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Age</span>
+                  <div className={styles.designOptions}>
+                    {[['young', 'Young'], ['middle_aged', 'Middle'], ['old', 'Older']].map(([val, label]) => (
+                      <button key={val}
+                        className={`${styles.designOption} ${dvAge === val ? styles.designOptionActive : ''}`}
+                        onClick={() => setDvAge(val)}
+                      >{label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Accent</span>
+                  <div className={styles.designOptions}>
+                    {['american', 'british', 'australian', 'african', 'indian'].map(a => (
+                      <button key={a}
+                        className={`${styles.designOption} ${dvAccent === a ? styles.designOptionActive : ''}`}
+                        onClick={() => setDvAccent(a)}
+                      >{a[0].toUpperCase() + a.slice(1)}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Accent Strength — {dvAccentStrength.toFixed(1)}</span>
+                  <input
+                    type="range" className={styles.designSlider}
+                    min="0.3" max="2" step="0.1"
+                    value={dvAccentStrength}
+                    onChange={e => setDvAccentStrength(parseFloat(e.target.value))}
+                  />
+                </div>
+
+                <div className={styles.designRow}>
+                  <span className={styles.designLabel}>Sample Text</span>
+                  <textarea
+                    className={styles.designTextarea}
+                    rows={2}
+                    value={dvText}
+                    onChange={e => setDvText(e.target.value)}
+                    maxLength={500}
+                  />
+                </div>
+
+                <button
+                  className={styles.designGenBtn}
+                  onClick={handleDesignGenerate}
+                  disabled={dvGenerating || !dvText.trim()}
+                >
+                  {dvGenerating ? 'Generating…' : 'Generate Preview'}
+                </button>
+
+                {dvAudioUrl && (
+                  <>
+                    <div className={styles.designPreviewRow}>
+                      <button className={styles.designPlayBtn}
+                        onClick={() => new Audio(dvAudioUrl).play().catch(() => {})}
+                      >▶ Play Preview</button>
+                      <span className={styles.designNote}>Happy with it? Name it and save.</span>
+                    </div>
+                    <div className={styles.designSaveRow}>
+                      <input
+                        className={styles.designNameInput}
+                        type="text"
+                        placeholder="Name this voice…"
+                        value={dvName}
+                        onChange={e => setDvName(e.target.value)}
+                        maxLength={50}
+                      />
+                      <button
+                        className={styles.designSaveBtn}
+                        onClick={handleDesignSave}
+                        disabled={dvSaving || !dvName.trim()}
+                      >
+                        {dvSaving ? 'Saving…' : dvSaved ? '✓ Saved!' : 'Save Voice'}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {dvError   && <p className={styles.designError}>{dvError}</p>}
+                {dvSaved   && <p className={styles.designSuccess}>Voice saved and selected. It&apos;s now in your voice list above.</p>}
+              </div>
+            )}
           </div>
         )}
       </section>

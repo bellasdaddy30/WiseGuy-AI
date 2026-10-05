@@ -169,36 +169,40 @@ export default function ChatPage() {
     stopAudio();
     setMicError('');
 
+    // Create the SR instance synchronously while the user-gesture context is
+    // still active. iOS Safari drops gesture context as soon as we go async,
+    // so rec.start() must be called either synchronously or from a non-promise
+    // code path on iOS.
+    const rec = new SR();
+    rec.continuous     = false;
+    rec.interimResults = true;
+    rec.lang           = 'en-US';
+    transcriptRef.current = '';
+
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('');
+      transcriptRef.current = t;
+      setInput(t);
+    };
+    rec.onend = () => {
+      setListening(false);
+      const final = transcriptRef.current.trim();
+      if (final && (voiceModeRef.current === 'auto' || handsFreeModeRef.current)) {
+        submitText(final);
+      }
+    };
+    rec.onerror = (e) => {
+      setListening(false);
+      if (e.error === 'not-allowed') {
+        setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
+        setTimeout(() => setMicError(''), 6000);
+      } else if (e.error === 'network') {
+        setMicError('Voice requires HTTPS — use the deployed URL, not localhost.');
+        setTimeout(() => setMicError(''), 4000);
+      }
+    };
+
     function beginRecognition() {
-      const rec = new SR();
-      rec.continuous     = false;
-      rec.interimResults = true;
-      rec.lang           = 'en-US';
-      transcriptRef.current = '';
-
-      rec.onresult = (e) => {
-        const t = Array.from(e.results).map(r => r[0].transcript).join('');
-        transcriptRef.current = t;
-        setInput(t);
-      };
-      rec.onend = () => {
-        setListening(false);
-        const final = transcriptRef.current.trim();
-        if (final && (voiceModeRef.current === 'auto' || handsFreeModeRef.current)) {
-          submitText(final);
-        }
-      };
-      rec.onerror = (e) => {
-        setListening(false);
-        if (e.error === 'not-allowed') {
-          setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
-          setTimeout(() => setMicError(''), 6000);
-        } else if (e.error === 'network') {
-          setMicError('Voice requires HTTPS — use the deployed URL, not localhost.');
-          setTimeout(() => setMicError(''), 4000);
-        }
-      };
-
       try {
         rec.start();
         recognitionRef.current = rec;
@@ -209,20 +213,24 @@ export default function ChatPage() {
       }
     }
 
-    // iOS Safari requires getUserMedia to be called first to trigger the
-    // mic permission dialog — SpeechRecognition alone silently fails without it.
-    if (navigator.mediaDevices?.getUserMedia) {
+    // iOS Safari: skip getUserMedia — SR has its own permission system and
+    // calling getUserMedia first means rec.start() ends up in a promise callback
+    // where the gesture context is already gone, causing silent failure.
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS || !navigator.mediaDevices?.getUserMedia) {
+      beginRecognition();
+    } else {
+      // Android / Desktop Chrome: getUserMedia first to surface the permission dialog,
+      // then release the stream so SR can acquire the mic on its own.
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
-          stream.getTracks().forEach(t => t.stop()); // release immediately; SR manages its own stream
+          stream.getTracks().forEach(t => t.stop());
           beginRecognition();
         })
         .catch(() => {
-          setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
+          setMicError('Mic blocked. Check your browser microphone settings.');
           setTimeout(() => setMicError(''), 6000);
         });
-    } else {
-      beginRecognition();
     }
   }
 
