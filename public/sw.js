@@ -1,6 +1,17 @@
-const CACHE = 'wiseguy-v1';
+// WiseGuy AI service worker
+//
+// FIX: the old version answered every request from the cache first and only
+// refreshed the cache in the background. That meant every deploy stayed
+// invisible until the SECOND time the app was opened, and on an installed
+// iPhone app that can take days. Pages now go to the network first, so a new
+// deploy shows up on the very next load. The cache is only a fallback for
+// when the phone is offline.
+//
+// Bump this name whenever this file changes. Activating deletes every cache
+// that does not match it, which throws away anything the old worker stored.
+const CACHE = 'wiseguy-v2';
 
-// Cache the shell pages so the app loads offline
+// Shell pages saved up front so the app still opens with no signal
 const PRECACHE = ['/', '/chat', '/customize', '/model', '/settings', '/paid', '/account'];
 
 self.addEventListener('install', e => {
@@ -12,12 +23,36 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
+
+// Next.js puts a content hash in every filename under /_next/static/, so a
+// given URL never changes. Safe to serve from cache forever.
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const res = await fetch(request);
+  if (res.ok) cache.put(request, res.clone());
+  return res;
+}
+
+// Pages and everything else: always ask the server, keep a copy for offline.
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(request);
+    if (res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw err;
+  }
+}
 
 self.addEventListener('fetch', e => {
   const { request } = e;
@@ -28,17 +63,10 @@ self.addEventListener('fetch', e => {
   if (url.pathname.startsWith('/api/')) return;
   if (url.origin !== location.origin) return;
 
-  // Stale-while-revalidate for everything else
-  e.respondWith(
-    caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(request);
-      const fresh = fetch(request)
-        .then(res => {
-          if (res.ok) cache.put(request, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fresh;
-    })
-  );
+  if (url.pathname.startsWith('/_next/static/')) {
+    e.respondWith(cacheFirst(request));
+    return;
+  }
+
+  e.respondWith(networkFirst(request));
 });
