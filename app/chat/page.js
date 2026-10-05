@@ -18,6 +18,7 @@ import {
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
+import { DEFAULT_VOICE_FX, loadVoiceFx, browserVoiceParams, playTuned } from '../../lib/voicefx';
 import styles from './chat.module.css';
 
 const ERROR_REPLY = "The AI service isn't responding right now.";
@@ -72,6 +73,8 @@ export default function ChatPage() {
   const oaVoiceRef     = useRef(oaVoice);
   const orVoiceRef     = useRef(orVoice);
   const ttsSpeedRef         = useRef(DEFAULT_TTS_SPEED);
+  // Voice Tuning from Settings (pitch, volume, equalizer). Read once on load.
+  const voiceFxRef          = useRef(DEFAULT_VOICE_FX);
   const loadingRef          = useRef(loading);
   const messagesRef         = useRef(messages);
   const alwaysOnRef         = useRef(false);
@@ -138,6 +141,7 @@ export default function ChatPage() {
       if (rv && ORPHEUS_VOICES.some(v => v.id === rv)) setOrVoice(rv);
       const spd = parseFloat(localStorage.getItem(TTS_SPEED_KEY));
       if (spd > 0) { setTtsSpeed(spd); ttsSpeedRef.current = spd; }
+      voiceFxRef.current = loadVoiceFx();
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -482,6 +486,7 @@ export default function ChatPage() {
 
       const speakWithBrowser = () => {
         const browserStyle = PERSONA_BROWSER_TTS[item.persona] ?? { rate: 1.05, pitch: 1.0 };
+        const tune = browserVoiceParams(voiceFxRef.current);
         const laughText = item.persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
         const segments = splitVoiceSegments(item.text)
           .map(seg => seg.style === 'laugh' ? { ...seg, text: laughText } : seg)
@@ -491,8 +496,8 @@ export default function ChatPage() {
           const mod  = BROWSER_SEGMENT_STYLE[seg.style] ?? BROWSER_SEGMENT_STYLE.normal;
           const utt  = new SpeechSynthesisUtterance(seg.text);
           utt.rate   = Math.min(2, browserStyle.rate * mod.rate * ttsSpeedRef.current);
-          utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
-          utt.volume = mod.volume;
+          utt.pitch  = Math.min(2, Math.max(0.1, browserStyle.pitch * mod.pitch * tune.pitch));
+          utt.volume = Math.min(1, mod.volume * tune.volume);
           if (i === segments.length - 1) { utt.onend = resolve; utt.onerror = resolve; }
           window.speechSynthesis.speak(utt);
         });
@@ -517,16 +522,19 @@ export default function ChatPage() {
         if (ctx) {
           const audioBuffer = await ctx.decodeAudioData(result.buffer);
           if (q.cancelled) return resolve();
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          source.playbackRate.value = ttsSpeedRef.current;
-          source.onended = resolve;
-          sourceNodeRef.current = source;
-          source.start(0);
+          // Applies speed, pitch, volume and equalizer. With everything at its
+          // default this plays the clip untouched, wired straight to the speakers.
+          const playing = playTuned(ctx, audioBuffer, {
+            speed: ttsSpeedRef.current,
+            fx: voiceFxRef.current,
+            onended: resolve,
+          });
+          sourceNodeRef.current = playing.source;
         } else {
           const url   = URL.createObjectURL(new Blob([result.buffer]));
           const audio = new Audio(url);
+          // No Web Audio here, so tuning can't be applied. Speed still can.
+          audio.playbackRate = ttsSpeedRef.current;
           audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
           audioRef.current = audio;
           audio.play().catch(e => { console.error('[tts fallback]', e.message); resolve(); });
