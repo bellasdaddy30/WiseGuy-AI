@@ -117,6 +117,52 @@
   animation: pulseRed 1.5s infinite ease-in-out;
 }
 
+/* ── Always-on live indicator ─────────────────── */
+.livePill {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #e05555;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid rgba(224, 85, 85, 0.35);
+  border-radius: 99px;
+  background: rgba(224, 85, 85, 0.06);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  background: #e05555;
+  border-radius: 50%;
+  animation: pulseRed 1.4s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+.mutedPill {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Mic button states for always-on mode */
+.micLive {
+  border-color: var(--accent) !important;
+  background: rgba(124, 106, 247, 0.1) !important;
+  animation: pulseAccent 1.8s infinite ease-in-out;
+}
+
+.micMuted {
+  opacity: 0.5;
+}
+
 .micError {
   font-size: 0.8rem;
   color: #e05555;
@@ -185,6 +231,11 @@
 @keyframes pulseRed {
   0%, 100% { box-shadow: 0 0 0 0 rgba(224, 85, 85, 0.3); }
   50%       { box-shadow: 0 0 0 5px rgba(224, 85, 85, 0); }
+}
+
+@keyframes pulseAccent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 106, 247, 0.35); }
+  50%       { box-shadow: 0 0 0 5px rgba(124, 106, 247, 0); }
 }
 
 .micBtn:disabled {

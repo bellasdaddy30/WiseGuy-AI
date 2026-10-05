@@ -44,6 +44,8 @@ export default function ChatPage() {
   const [micError, setMicError]         = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [convHistory, setConvHistory]   = useState([]);
+  const [alwaysOn, setAlwaysOn]         = useState(false);
+  const [micMuted, setMicMuted]         = useState(false);
 
   const convIdRef      = useRef(null);
   const convCreatedRef = useRef(null);
@@ -66,8 +68,12 @@ export default function ChatPage() {
   const elVoiceRef     = useRef(elVoice);
   const oaVoiceRef     = useRef(oaVoice);
   const orVoiceRef     = useRef(orVoice);
-  const loadingRef     = useRef(loading);
-  const messagesRef    = useRef(messages);
+  const loadingRef          = useRef(loading);
+  const messagesRef         = useRef(messages);
+  const alwaysOnRef         = useRef(false);
+  const micMutedRef         = useRef(false);
+  const continuousActiveRef = useRef(false);
+  const submitTextRef       = useRef(null);
 
   useEffect(() => { voiceModeRef.current     = voiceMode;   }, [voiceMode]);
   useEffect(() => { aiVoiceRef.current       = aiVoice;     }, [aiVoice]);
@@ -79,6 +85,8 @@ export default function ChatPage() {
   useEffect(() => { orVoiceRef.current       = orVoice;     }, [orVoice]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
+  useEffect(() => { alwaysOnRef.current      = alwaysOn;   }, [alwaysOn]);
+  useEffect(() => { micMutedRef.current      = micMuted;   }, [micMuted]);
 
   useEffect(() => {
     // Load conversation history
@@ -155,6 +163,111 @@ export default function ChatPage() {
     try { if (sourceNodeRef.current) { sourceNodeRef.current.stop(); sourceNodeRef.current = null; } } catch {}
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis?.cancel();
+  }
+
+  // ── Always-on continuous listening loop ───────────────────────────────────
+  // Restarts itself after each utterance. Submits when SR fires onend with text.
+  // Pauses while loading so we don't queue a second message mid-response.
+  // Detects speech during AI audio playback and cuts the audio (interrupt).
+  function runContinuousListening() {
+    if (!continuousActiveRef.current || micMutedRef.current) return;
+    if (loadingRef.current) {
+      // AI is still fetching/streaming — check back and restart once it's done
+      setTimeout(() => runContinuousListening(), 600);
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.continuous     = false; // one utterance per session; auto-restart keeps it going
+    rec.interimResults = true;
+    rec.lang           = 'en-US';
+
+    let sessionTranscript = '';
+
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('');
+      sessionTranscript = t;
+      transcriptRef.current = t;
+      setInput(t);
+      // Cut the AI's audio the moment the user starts speaking
+      if (t.trim() && speechRef.current) stopAudio();
+    };
+
+    rec.onend = () => {
+      setListening(false);
+      const final = sessionTranscript.trim();
+      sessionTranscript = '';
+      transcriptRef.current = '';
+      if (final && !loadingRef.current) {
+        // Use the ref so we always get the latest version of submitText
+        (submitTextRef.current ?? submitText)(final);
+        setInput('');
+      } else {
+        setInput('');
+      }
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 400);
+    };
+
+    rec.onerror = (e) => {
+      setListening(false);
+      if (e.error === 'not-allowed') {
+        continuousActiveRef.current = false;
+        setAlwaysOn(false);
+        setMicError('Mic blocked. Go to Settings → Safari → Microphone and allow this site.');
+        setTimeout(() => setMicError(''), 6000);
+        return;
+      }
+      // 'no-speech', 'aborted', network — just restart silently
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
+    };
+
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+      setListening(true);
+    } catch {
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
+    }
+  }
+
+  function toggleAlwaysOn() {
+    const next = !alwaysOnRef.current;
+    setAlwaysOn(next);
+    alwaysOnRef.current = next;
+    if (next) {
+      unlockAudioContext();
+      // Auto-enable AI voice when entering always-on mode
+      if (!aiVoiceRef.current) {
+        setAiVoice(true);
+        aiVoiceRef.current = true;
+        try { localStorage.setItem(AI_VOICE_KEY, 'true'); } catch {}
+      }
+      setMicMuted(false);
+      micMutedRef.current = false;
+      continuousActiveRef.current = true;
+      runContinuousListening();
+    } else {
+      continuousActiveRef.current = false;
+      recognitionRef.current?.stop();
+      setListening(false);
+      setMicMuted(false);
+      micMutedRef.current = false;
+    }
+  }
+
+  function toggleMicMuted() {
+    const next = !micMutedRef.current;
+    setMicMuted(next);
+    micMutedRef.current = next;
+    if (next) {
+      recognitionRef.current?.stop();
+      setListening(false);
+    } else {
+      runContinuousListening();
+    }
   }
 
   // startListening is defined here so the speech queue can call it after audio ends
@@ -472,6 +585,10 @@ export default function ChatPage() {
     }
   }, [model, personality]); // eslint-disable-line
 
+  // Keep submitTextRef pointing at the latest submitText so the continuous loop
+  // never closes over a stale version (model or personality may have changed).
+  useEffect(() => { submitTextRef.current = submitText; }, [submitText]);
+
   function startNewChat() {
     stopAudio();
     recognitionRef.current?.stop();
@@ -521,6 +638,8 @@ export default function ChatPage() {
   }
 
   function handleMic() {
+    // In always-on mode the mic button is the mute toggle, not push-to-talk
+    if (alwaysOn) { toggleMicMuted(); return; }
     if (listening) { recognitionRef.current?.stop(); return; }
     startListening();
   }
@@ -634,19 +753,39 @@ export default function ChatPage() {
       {micError && <div className={styles.micError}>{micError}</div>}
 
       <div className={styles.controlsBar}>
-        <button
-          className={styles.historyBtn}
-          onClick={() => setSidebarOpen(o => !o)}
-          title="Conversation history"
-        >☰ History</button>
+        <div className={styles.leftControls}>
+          <button
+            className={styles.historyBtn}
+            onClick={() => setSidebarOpen(o => !o)}
+            title="Conversation history"
+          >☰ History</button>
+          {alwaysOn && !micMuted && (
+            <div className={styles.livePill}>
+              <span className={styles.liveDot} />
+              Live
+            </div>
+          )}
+          {alwaysOn && micMuted && (
+            <div className={styles.mutedPill}>Mic muted</div>
+          )}
+        </div>
 
-        <button
-          className={`${styles.ctrlBtn} ${aiVoice ? styles.ctrlActive : ''}`}
-          onClick={toggleAiVoice}
-          title={aiVoice ? 'AI voice on — tap to mute' : 'AI voice off — tap to unmute'}
-        >
-          {aiVoice ? '🔊' : '🔇'}
-        </button>
+        <div className={styles.voiceToggles}>
+          <button
+            className={`${styles.ctrlBtn} ${aiVoice ? styles.ctrlActive : ''}`}
+            onClick={toggleAiVoice}
+            title={aiVoice ? 'AI voice on — tap to mute' : 'AI voice off — tap to unmute'}
+          >
+            {aiVoice ? '🔊' : '🔇'}
+          </button>
+          <button
+            className={`${styles.ctrlBtn} ${alwaysOn ? styles.ctrlActive : ''}`}
+            onClick={toggleAlwaysOn}
+            title={alwaysOn ? 'Always-on listening: ON — tap to stop' : 'Always-on listening: OFF — tap to start'}
+          >
+            🎙️ {alwaysOn ? 'On' : 'Off'}
+          </button>
+        </div>
       </div>
 
       <form className={styles.inputBar} onSubmit={handleSubmit}>
@@ -662,12 +801,20 @@ export default function ChatPage() {
         />
         <button
           type="button"
-          className={`${styles.micBtn} ${listening ? styles.micActive : ''}`}
+          className={`${styles.micBtn} ${
+            alwaysOn
+              ? (micMuted ? styles.micMuted : (listening ? styles.micActive : styles.micLive))
+              : (listening ? styles.micActive : '')
+          }`}
           onClick={handleMic}
-          disabled={loading}
-          title={listening ? 'Stop recording' : 'Voice input'}
+          disabled={loading && !alwaysOn}
+          title={
+            alwaysOn
+              ? (micMuted ? 'Tap to unmute mic' : 'Mic live — tap to mute')
+              : (listening ? 'Stop recording' : 'Voice input')
+          }
         >
-          🎤
+          {alwaysOn && micMuted ? '🔇' : '🎤'}
         </button>
         <button
           className={styles.sendBtn}
