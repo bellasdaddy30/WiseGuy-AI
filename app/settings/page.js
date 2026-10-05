@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   TTS_PROVIDER_KEY, TTS_SPEED_KEY,
   TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  TTS_VOICE_QWEN_KEY, TTS_QWEN_STYLE_KEY, DEFAULT_QWEN_VOICE, QWEN_VOICES,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
   DEFAULT_TTS_SPEED,
   GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES,
@@ -27,6 +28,7 @@ const TTS_PROVIDERS = [
   { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Premium voices. Each persona gets its own voice.', adminOnly: true },
   { id: 'openai',     label: 'OpenAI',     desc: 'High quality. Needs OPENAI_API_KEY.', adminOnly: true },
   { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.', adminOnly: true },
+  { id: 'qwen',       label: 'Qwen',       desc: 'Your own Hugging Face Space. Free, but only a few uses a day.', adminOnly: true },
 ];
 
 
@@ -81,6 +83,10 @@ export default function SettingsPage() {
   const [elVoices,    setElVoices]    = useState(ELEVENLABS_VOICES);
   const [oaVoice,     setOaVoice]     = useState(DEFAULT_OPENAI_VOICE);
   const [orVoice,     setOrVoice]     = useState(DEFAULT_ORPHEUS_VOICE);
+  const [qwVoice,     setQwVoice]     = useState(DEFAULT_QWEN_VOICE);
+  // Qwen only: a plain-English note on how to say things. Empty = persona's own style.
+  const [qwStyle,     setQwStyle]     = useState('');
+  const qwStyleRef = useRef('');
   const [aiVoice,     setAiVoice]     = useState(true);
   // FIX: was 'on', which is not one of the VOICE_MODES ids, so no card could ever match it.
   const [voiceMode,   setVoiceMode]   = useState('off');
@@ -164,6 +170,8 @@ export default function SettingsPage() {
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
     setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
+    setQwVoice(load(TTS_VOICE_QWEN_KEY, DEFAULT_QWEN_VOICE));
+    setQwStyle(load(TTS_QWEN_STYLE_KEY, ''));
     setVoiceSpeed(parseFloat(load(TTS_SPEED_KEY, String(DEFAULT_TTS_SPEED))) || DEFAULT_TTS_SPEED);
     setFx(loadVoiceFx());
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
@@ -197,6 +205,8 @@ export default function SettingsPage() {
     save(TTS_VOICE_ELEVENLABS_KEY, elVoice);
     save(TTS_VOICE_OPENAI_KEY, oaVoice);
     save(TTS_VOICE_ORPHEUS_KEY, orVoice);
+    save(TTS_VOICE_QWEN_KEY, qwVoice);
+    save(TTS_QWEN_STYLE_KEY, qwStyle.trim());
     save(AI_VOICE_KEY, aiVoice);
     if (voiceMode === 'handsfree') {
       save(HANDS_FREE_KEY, 'true');
@@ -226,6 +236,8 @@ export default function SettingsPage() {
       localStorage.removeItem(TTS_VOICE_ELEVENLABS_KEY);
       localStorage.removeItem(TTS_VOICE_OPENAI_KEY);
       localStorage.removeItem(TTS_VOICE_ORPHEUS_KEY);
+      localStorage.removeItem(TTS_VOICE_QWEN_KEY);
+      localStorage.removeItem(TTS_QWEN_STYLE_KEY);
       localStorage.removeItem(AI_VOICE_KEY);
       localStorage.removeItem(VOICE_MODE_KEY);
       localStorage.removeItem(HANDS_FREE_KEY);
@@ -240,6 +252,8 @@ export default function SettingsPage() {
     setElVoice(DEFAULT_ELEVENLABS_VOICE);
     setOaVoice(DEFAULT_OPENAI_VOICE);
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
+    setQwVoice(DEFAULT_QWEN_VOICE);
+    setQwStyle('');
     setVoiceSpeed(DEFAULT_TTS_SPEED);
     setFx(normalizeVoiceFx(null));
     setAiVoice(true);
@@ -352,13 +366,16 @@ export default function SettingsPage() {
         return;
       }
 
-      const key = `${provider}:${voiceId}`;
+      // Qwen takes a "how to say it" note. A different note is a different
+      // clip, so it gets its own slot in the cache.
+      const style = provider === 'qwen' ? qwStyleRef.current.trim() : '';
+      const key = `${provider}:${voiceId}:${style}`;
       let sample = sampleCacheRef.current.get(key);
       if (!sample) {
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: SAMPLE_LINE, provider, voice: voiceId }),
+          body: JSON.stringify({ text: SAMPLE_LINE, provider, voice: voiceId, ...(style && { style }) }),
         });
         if (isStale()) return;
         if (!res.ok) {
@@ -413,6 +430,7 @@ export default function SettingsPage() {
     demoHandleRef.current?.update(fx);
   }, [fx]);
   useEffect(() => { speedRef.current = voiceSpeed; }, [voiceSpeed]);
+  useEffect(() => { qwStyleRef.current = qwStyle; }, [qwStyle]);
 
   // Speed and pitch are baked into the clip before it plays, so they can't be
   // bent mid-playback. Instead the test restarts once the slider settles. The
@@ -509,9 +527,9 @@ export default function SettingsPage() {
     if (id === 'elevenlabs') fetchElVoices();
   }
 
-  const voiceMap     = { google: googleVoice, elevenlabs: elVoice, openai: oaVoice, orpheus: orVoice };
-  const voiceSetters = { google: setGoogleVoice, elevenlabs: setElVoice, openai: setOaVoice, orpheus: setOrVoice };
-  const voiceLists   = { google: GOOGLE_VOICES, elevenlabs: elVoices, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
+  const voiceMap     = { google: googleVoice, elevenlabs: elVoice, openai: oaVoice, orpheus: orVoice, qwen: qwVoice };
+  const voiceSetters = { google: setGoogleVoice, elevenlabs: setElVoice, openai: setOaVoice, orpheus: setOrVoice, qwen: setQwVoice };
+  const voiceLists   = { google: GOOGLE_VOICES, elevenlabs: elVoices, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES, qwen: QWEN_VOICES };
 
   const isBrowserVoice = ttsProvider === 'browser';
   const activePreset   = matchingPreset(fx);
@@ -550,7 +568,10 @@ export default function SettingsPage() {
                 className={`${styles.voiceItem} ${voiceMap[ttsProvider] === v.id ? styles.voiceActive : ''}`}
                 onClick={() => voiceSetters[ttsProvider](v.id)}
               >
-                <span className={styles.voiceName}>{v.name}</span>
+                <span className={styles.voiceName}>
+                  {v.name}
+                  {v.note && <span className={styles.voiceNote}>{v.note}</span>}
+                </span>
                 <span
                   role="button"
                   className={`${styles.previewBtn} ${playingDemo === v.id ? styles.previewPlaying : ''}`}
@@ -560,6 +581,24 @@ export default function SettingsPage() {
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {ttsProvider === 'qwen' && (
+          <div className={styles.designRow}>
+            <p className={styles.designNote}>
+              Every preview and every spoken reply uses one of your Space&apos;s few free generations for the day. A preview you have already played is kept until you leave this page, so playing it again is free.
+            </p>
+            <span className={styles.designLabel}>How to say it (optional)</span>
+            <textarea
+              className={styles.designTextarea}
+              rows={2}
+              placeholder="e.g. dry and sarcastic, a little tired"
+              value={qwStyle}
+              onChange={e => setQwStyle(e.target.value)}
+              maxLength={300}
+            />
+            <p className={styles.designNote}>Leave it empty and each persona speaks in its own style.</p>
           </div>
         )}
 

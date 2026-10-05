@@ -438,6 +438,15 @@
   color: var(--text);
 }
 
+/* Second line under a voice name: its native language and character */
+.voiceNote {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .previewBtn {
   flex-shrink: 0;
   padding: 0.25rem 0.6rem;

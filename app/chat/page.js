@@ -13,6 +13,7 @@ import {
   GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES, PERSONA_BROWSER_TTS,
   TTS_PROVIDER_KEY, TTS_SPEED_KEY,
   TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  TTS_VOICE_QWEN_KEY, TTS_QWEN_STYLE_KEY, DEFAULT_QWEN_VOICE, QWEN_VOICES,
   DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
   DEFAULT_TTS_SPEED,
   VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
@@ -24,8 +25,8 @@ import styles from './chat.module.css';
 
 const ERROR_REPLY = "The AI service isn't responding right now.";
 
-const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai', 'orpheus'];
-const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI', orpheus: 'Orpheus' };
+const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai', 'orpheus', 'qwen'];
+const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI', orpheus: 'Orpheus', qwen: 'Qwen' };
 
 export default function ChatPage() {
   const [messages, setMessages]         = useState([
@@ -45,6 +46,7 @@ export default function ChatPage() {
   const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
   const [oaVoice, setOaVoice]           = useState(DEFAULT_OPENAI_VOICE);
   const [orVoice, setOrVoice]           = useState(DEFAULT_ORPHEUS_VOICE);
+  const [qwVoice, setQwVoice]           = useState(DEFAULT_QWEN_VOICE);
   const [micError, setMicError]         = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [convHistory, setConvHistory]   = useState([]);
@@ -73,6 +75,8 @@ export default function ChatPage() {
   const elVoiceRef     = useRef(elVoice);
   const oaVoiceRef     = useRef(oaVoice);
   const orVoiceRef     = useRef(orVoice);
+  const qwVoiceRef     = useRef(qwVoice);
+  const qwStyleRef     = useRef('');   // Qwen's "how to say it" note from Settings
   const ttsSpeedRef         = useRef(DEFAULT_TTS_SPEED);
   // Voice Tuning from Settings (pitch, volume, equalizer). Read once on load.
   const voiceFxRef          = useRef(DEFAULT_VOICE_FX);
@@ -94,6 +98,7 @@ export default function ChatPage() {
   useEffect(() => { elVoiceRef.current       = elVoice;     }, [elVoice]);
   useEffect(() => { oaVoiceRef.current       = oaVoice;     }, [oaVoice]);
   useEffect(() => { orVoiceRef.current       = orVoice;     }, [orVoice]);
+  useEffect(() => { qwVoiceRef.current       = qwVoice;     }, [qwVoice]);
   useEffect(() => { ttsSpeedRef.current      = ttsSpeed;    }, [ttsSpeed]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
@@ -150,6 +155,9 @@ export default function ChatPage() {
       if (ov && OPENAI_VOICES.some(v => v.id === ov)) setOaVoice(ov);
       const rv = localStorage.getItem(TTS_VOICE_ORPHEUS_KEY);
       if (rv && ORPHEUS_VOICES.some(v => v.id === rv)) setOrVoice(rv);
+      const qv = localStorage.getItem(TTS_VOICE_QWEN_KEY);
+      if (qv && QWEN_VOICES.some(v => v.id === qv)) setQwVoice(qv);
+      qwStyleRef.current = localStorage.getItem(TTS_QWEN_STYLE_KEY) || '';
       const spd = parseFloat(localStorage.getItem(TTS_SPEED_KEY));
       if (spd > 0) { setTtsSpeed(spd); ttsSpeedRef.current = spd; }
       voiceFxRef.current = loadVoiceFx();
@@ -492,8 +500,13 @@ export default function ChatPage() {
   // Each finished sentence is sent to the voice as soon as it streams in, so
   // audio starts while the rest of the reply is still being written. Chunks
   // are fetched in parallel but always played in order.
-  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000, openai: 2000, orpheus: 800 };
+  const TTS_CHAR_BUDGET = { browser: 500, elevenlabs: 1000, google: 4000, openai: 2000, orpheus: 800, qwen: 600 };
   const FIRST_CHUNK_MIN = 1;    // speak the first sentence immediately
+  // Qwen is the exception to sentence-by-sentence speech. Each request to it
+  // spends one of a handful of free GPU generations a day, so the whole reply
+  // goes in a single request once it has finished streaming. Infinity here
+  // means "never cut early"; the reply is sent when it ends.
+  const WHOLE_REPLY_PROVIDERS = new Set(['qwen']);
   // Then batch sentences to limit API calls (Google's free voice quota is small).
   const LATER_CHUNK_MIN = { google: 450, elevenlabs: 300, openai: 300, orpheus: 150, browser: 200 };
   // After a quota/rate error, skip that provider for a while and use the browser voice.
@@ -511,8 +524,9 @@ export default function ChatPage() {
     if (!q || q.cancelled) return;
     q.buffer += text;
     for (;;) {
+      const whole = WHOLE_REPLY_PROVIDERS.has(ttsProviderRef.current) && !isCooling(ttsProviderRef.current);
       const later = LATER_CHUNK_MIN[ttsProviderRef.current] ?? 200;
-      const cut = findSpeechCut(q.buffer, q.items.length === 0 ? FIRST_CHUNK_MIN : later);
+      const cut = whole ? -1 : findSpeechCut(q.buffer, q.items.length === 0 ? FIRST_CHUNK_MIN : later);
       if (cut === -1) break;
       enqueueSpeech(q, q.buffer.slice(0, cut));
       q.buffer = q.buffer.slice(cut);
@@ -525,10 +539,22 @@ export default function ChatPage() {
     }
   }
 
+  function isCooling(provider) {
+    return (voiceCooldownRef.current[provider] ?? 0) > Date.now();
+  }
+
+  // Which voice actually speaks. A voice that has hit its limit is skipped for
+  // a while. Qwen runs out daily by design, so it steps down to Google, which
+  // still sounds good; everything else steps down to the browser voice.
+  function providerToUse(chosen) {
+    if (!isCooling(chosen)) return chosen;
+    if (chosen === 'qwen' && !isCooling('google')) return 'google';
+    return 'browser';
+  }
+
   function enqueueSpeech(q, raw) {
     const chosen = ttsProviderRef.current;
-    const cooling = (voiceCooldownRef.current[chosen] ?? 0) > Date.now();
-    const provider = cooling ? 'browser' : chosen;
+    const provider = providerToUse(chosen);
     let text = stripMarkdown(raw);
     if (!text.trim()) return;
     const budget = TTS_CHAR_BUDGET[provider] ?? 4000;
@@ -549,11 +575,13 @@ export default function ChatPage() {
       const voice = provider === 'google'   ? googleVoiceRef.current
                   : provider === 'openai'   ? oaVoiceRef.current
                   : provider === 'orpheus'  ? orVoiceRef.current
+                  : provider === 'qwen'     ? qwVoiceRef.current
                   : elVoiceRef.current;
+      const style = provider === 'qwen' ? qwStyleRef.current.trim() : '';
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: toProviderTags(text, provider, persona), provider, voice, persona }),
+        body: JSON.stringify({ text: toProviderTags(text, provider, persona), provider, voice, persona, ...(style && { style }) }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -834,6 +862,10 @@ export default function ChatPage() {
       const next = nextVoice(ORPHEUS_VOICES, orVoice);
       setOrVoice(next);
       try { localStorage.setItem(TTS_VOICE_ORPHEUS_KEY, next); } catch {}
+    } else if (ttsProvider === 'qwen') {
+      const next = nextVoice(QWEN_VOICES, qwVoice);
+      setQwVoice(next);
+      try { localStorage.setItem(TTS_VOICE_QWEN_KEY, next); } catch {}
     }
   }
 
@@ -880,6 +912,8 @@ export default function ChatPage() {
     ? OPENAI_VOICES.find(v => v.id === oaVoice)?.name
     : ttsProvider === 'orpheus'
     ? ORPHEUS_VOICES.find(v => v.id === orVoice)?.name
+    : ttsProvider === 'qwen'
+    ? QWEN_VOICES.find(v => v.id === qwVoice)?.name
     : null;
 
   return (

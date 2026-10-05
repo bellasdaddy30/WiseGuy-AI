@@ -28,15 +28,26 @@ name is `wiseguy-ai`. Read this fully first.
 
 `GROQ_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `OPENAI_API_KEY`,
 `ELEVENLABS_API_KEY`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`,
-`ADMIN_PIN`.
+`ADMIN_PIN`. Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
+`QWEN_SPACE` (use a different Space than the default).
 
 ## Admin lock (paid voices)
 
-ElevenLabs, OpenAI and Orpheus voices and the voice designer spend Chris's credits or
+ElevenLabs, OpenAI, Orpheus and Qwen voices and the voice designer spend Chris's credits or
 quota. They are gated **on the server** by `lib/adminAuth.js`: `/api/admin-unlock`
 checks `ADMIN_PIN` and sets a signed httpOnly cookie (signed with `AUTH_SECRET`); the
 paid routes call `isAdmin(request)`. With no `ADMIN_PIN`, paid features are open in
 `npm run dev` and closed in production. Never gate paid features only in the UI.
+
+## Qwen voice
+
+- Runs on Chris's own Hugging Face Space, `Moneynbanks/Qwen3-TTS`, a copy of Qwen's demo
+  on the free shared GPU. `lib/qwen.js` is the client; `/api/tts` provider `qwen` uses it.
+- The free GPU allowance is tiny (minutes per day), so chat sends a whole reply in ONE
+  request instead of sentence by sentence, and steps down to Google when the allowance
+  runs out. Don't add anything that calls the Space in a loop.
+- `node scripts/qwen-check.mjs` tests the real Space from Ragnarok (one generation).
+  Cloud sessions cannot reach Hugging Face, so that script is how it gets verified.
 
 ## Deploys (how to tell a change is live)
 
