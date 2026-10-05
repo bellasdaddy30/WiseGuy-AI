@@ -13,6 +13,10 @@ import { MODEL_KEY, MODELS, DEFAULT_MODEL } from '../../lib/models';
 import { clearHistory } from '../../lib/history';
 import { PERSONALITY_KEY } from '../../lib/personality';
 import { getMemory, addMemoryItem, removeMemoryItem, clearMemory, MEMORY_KEY } from '../../lib/memory';
+import {
+  VOICE_FX_KEY, VOICE_FX_PRESETS, EQ_BANDS, EQ_RANGE_DB, PITCH_RANGE, VOLUME_MAX, SPEED_MIN, SPEED_MAX,
+  normalizeVoiceFx, loadVoiceFx, saveVoiceFx, matchingPreset, browserVoiceParams, playTuned,
+} from '../../lib/voicefx';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
@@ -39,6 +43,36 @@ function save(key, value) {
   try { localStorage.setItem(key, String(value)); } catch {}
 }
 
+const SAMPLE_LINE = 'Hey there — WiseGuy AI at your service.';
+const BROWSER_TEST_ID = '__browser__';
+
+// "+3", "−1.5", "0" — one decimal only when it is needed
+function signed(v) {
+  if (Math.abs(v) < 0.001) return '0';
+  const n = Math.abs(v);
+  return `${v > 0 ? '+' : '−'}${Number.isInteger(n) ? n : n.toFixed(1)}`;
+}
+
+function TuneSlider({ label, hint, display, value, min, max, step, onChange, disabled }) {
+  return (
+    <label className={`${styles.tuneRow} ${disabled ? styles.tuneDisabled : ''}`}>
+      <span className={styles.tuneRowHead}>
+        <span className={styles.tuneLabel}>
+          {label}{hint && <span className={styles.tuneHint}> · {hint}</span>}
+        </span>
+        <span className={styles.tuneValue}>{display}</span>
+      </span>
+      <input
+        type="range" className={styles.tuneSlider}
+        min={min} max={max} step={step}
+        value={value}
+        disabled={disabled}
+        onChange={e => onChange(parseFloat(e.target.value))}
+      />
+    </label>
+  );
+}
+
 export default function SettingsPage() {
   const [ttsProvider, setTtsProvider] = useState(DEFAULT_TTS_PROVIDER);
   const [googleVoice, setGoogleVoice] = useState(DEFAULT_GOOGLE_VOICE);
@@ -56,6 +90,18 @@ export default function SettingsPage() {
   // FIX: counter that goes up on every stop. A preview that is still loading
   // compares against it and bails out if a newer tap has happened since.
   const demoReqRef = useRef(0);
+  const [demoError, setDemoError] = useState('');
+
+  // Voice Tuning: pitch, volume and equalizer. Speed is voiceSpeed, further down.
+  const [fx, setFx] = useState(() => normalizeVoiceFx(null));
+  // Refs so code that runs after a network wait reads the sliders as they are now
+  const fxRef          = useRef(fx);
+  const speedRef       = useRef(DEFAULT_TTS_SPEED);
+  const audioCtxRef    = useRef(null);       // Web Audio engine, created on the first tap
+  const demoHandleRef  = useRef(null);       // the tuned clip that is playing, if any
+  const sampleCacheRef = useRef(new Map());  // provider:voice -> fetched sample, so re-testing is free
+  const lastDemoRef    = useRef(null);       // what the last preview was, for restarting it
+  const prevTuneRef    = useRef(null);
 
   // Design a Voice
   const [dvOpen,           setDvOpen]           = useState(false);
@@ -112,6 +158,7 @@ export default function SettingsPage() {
     setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
     setOrVoice(load(TTS_VOICE_ORPHEUS_KEY, DEFAULT_ORPHEUS_VOICE));
     setVoiceSpeed(parseFloat(load(TTS_SPEED_KEY, String(DEFAULT_TTS_SPEED))) || DEFAULT_TTS_SPEED);
+    setFx(loadVoiceFx());
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
@@ -122,6 +169,10 @@ export default function SettingsPage() {
   // otherwise it keeps playing with no way to stop it.
   useEffect(() => () => {
     demoReqRef.current += 1;
+    demoHandleRef.current?.stop();
+    demoHandleRef.current = null;
+    try { audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
     const audio = demoAudioRef.current;
     if (audio) {
       audio.onended = audio.onerror = null;
@@ -135,6 +186,7 @@ export default function SettingsPage() {
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
     save(TTS_SPEED_KEY, voiceSpeed);
+    saveVoiceFx(fx);
     save(TTS_VOICE_GOOGLE_KEY, googleVoice);
     save(TTS_VOICE_ELEVENLABS_KEY, elVoice);
     save(TTS_VOICE_OPENAI_KEY, oaVoice);
@@ -172,6 +224,7 @@ export default function SettingsPage() {
       localStorage.removeItem(VOICE_MODE_KEY);
       localStorage.removeItem(HANDS_FREE_KEY);
       localStorage.removeItem(TTS_SPEED_KEY);
+      localStorage.removeItem(VOICE_FX_KEY);
       localStorage.removeItem(MODEL_KEY);
       localStorage.removeItem(PERSONALITY_KEY);
     } catch {}
@@ -182,6 +235,7 @@ export default function SettingsPage() {
     setOaVoice(DEFAULT_OPENAI_VOICE);
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
     setVoiceSpeed(DEFAULT_TTS_SPEED);
+    setFx(normalizeVoiceFx(null));
     setAiVoice(true);
     // FIX: was 'on' (not a real mode). 'off' matches what a fresh load with empty storage gives.
     setVoiceMode('off');
@@ -208,8 +262,30 @@ export default function SettingsPage() {
   }
 
   // ── Voice demo ──────────────────────────────────────────────────────
+  // iPhones only allow sound that was started by a tap. Creating the audio
+  // engine and playing one silent sample inside the tap handler "unlocks" it,
+  // so the real clip can start a second later when the server answers.
+  function ensureAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      if (!audioCtxRef.current) audioCtxRef.current = new AC();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      const blip = ctx.createBufferSource();
+      blip.buffer = ctx.createBuffer(1, 1, 22050);
+      blip.connect(ctx.destination);
+      blip.start(0);
+      return ctx;
+    } catch {
+      return null;
+    }
+  }
+
   function stopDemo() {
     demoReqRef.current += 1; // cancels any preview that is still loading
+    demoHandleRef.current?.stop();
+    demoHandleRef.current = null;
     const audio = demoAudioRef.current;
     if (audio) {
       audio.onended = audio.onerror = null;
@@ -221,50 +297,140 @@ export default function SettingsPage() {
     setPlayingDemo(null);
   }
 
-  async function playDemo(voiceId, provider, previewUrl) {
-    if (playingDemo === voiceId) { stopDemo(); return; }
+  // restart: true replays the same voice instead of treating the call as "tap again to stop"
+  async function playDemo(voiceId, provider, previewUrl, { restart = false } = {}) {
+    if (!restart && playingDemo === voiceId) { stopDemo(); return; }
     stopDemo();
     const reqId = demoReqRef.current;
     const isStale = () => demoReqRef.current !== reqId;
+    const done = () => {
+      if (isStale()) return;
+      demoHandleRef.current = null;
+      setPlayingDemo(null);
+    };
+    const fail = message => {
+      if (isStale()) return;
+      setDemoError(message);
+      done();
+    };
+    lastDemoRef.current = { voiceId, provider, previewUrl };
+    setDemoError('');
     setPlayingDemo(voiceId);
+    // Must run before the first await, while this is still "inside the tap"
+    const ctx = provider === 'browser' || previewUrl ? null : ensureAudio();
+
     try {
       if (provider === 'browser') {
-        const utt = new SpeechSynthesisUtterance('Hey there — WiseGuy AI at your service.');
-        utt.onend = utt.onerror = () => { if (!isStale()) setPlayingDemo(null); };
+        // The device speaks this itself, so only speed, pitch and volume apply.
+        const tune = browserVoiceParams(fxRef.current);
+        const utt  = new SpeechSynthesisUtterance(SAMPLE_LINE);
+        utt.rate   = Math.min(2, Math.max(0.1, speedRef.current));
+        utt.pitch  = Math.min(2, Math.max(0.1, tune.pitch));
+        utt.volume = Math.min(1, 0.85 * tune.volume); // 0.85 is what chat uses for normal speech
+        utt.onend = utt.onerror = done;
         window.speechSynthesis.speak(utt);
         return;
       }
-      let url = previewUrl;
-      let blobUrl = null;
-      if (!url) {
+
+      if (previewUrl) {
+        // ElevenLabs' own sample clip. Played as-is, straight from their server.
+        const audio = new Audio(previewUrl);
+        demoAudioRef.current = audio;
+        const finish = () => {
+          if (demoAudioRef.current !== audio) return;
+          demoAudioRef.current = null;
+          setPlayingDemo(null);
+        };
+        audio.onended = audio.onerror = finish;
+        audio.play().catch(finish);
+        return;
+      }
+
+      const key = `${provider}:${voiceId}`;
+      let sample = sampleCacheRef.current.get(key);
+      if (!sample) {
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: 'Hey there — WiseGuy AI at your service.', provider, voice: voiceId }),
+          body: JSON.stringify({ text: SAMPLE_LINE, provider, voice: voiceId }),
         });
         if (isStale()) return;
-        if (!res.ok) { setPlayingDemo(null); return; }
-        const buf = await res.arrayBuffer();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          fail(err.error || `Voice error ${res.status}.`);
+          return;
+        }
+        const bytes = await res.arrayBuffer();
         if (isStale()) return;
-        blobUrl = URL.createObjectURL(
-          new Blob([buf], { type: res.headers.get('Content-Type') || 'audio/mpeg' })
-        );
-        url = blobUrl;
+        sample = { bytes, type: res.headers.get('Content-Type') || 'audio/wav', decoded: null };
+        sampleCacheRef.current.set(key, sample);
       }
-      const audio = new Audio(url);
+
+      if (ctx) {
+        if (!sample.decoded) {
+          // decodeAudioData empties the buffer it is given, so hand it a copy
+          sample.decoded = await ctx.decodeAudioData(sample.bytes.slice(0));
+          if (isStale()) return;
+        }
+        demoHandleRef.current = playTuned(ctx, sample.decoded, {
+          speed: speedRef.current,
+          fx: fxRef.current,
+          live: true,
+          onended: done,
+        });
+        return;
+      }
+
+      // No Web Audio in this browser: plain playback. Speed still works, tuning does not.
+      const blobUrl = URL.createObjectURL(new Blob([sample.bytes], { type: sample.type }));
+      const audio = new Audio(blobUrl);
       audio._blobUrl = blobUrl;
+      audio.playbackRate = speedRef.current;
       demoAudioRef.current = audio;
       const finish = () => {
         if (demoAudioRef.current !== audio) return;
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        URL.revokeObjectURL(blobUrl);
         demoAudioRef.current = null;
         setPlayingDemo(null);
       };
       audio.onended = audio.onerror = finish;
       audio.play().catch(finish);
-    } catch {
-      if (!isStale()) setPlayingDemo(null);
+    } catch (err) {
+      fail(err?.message || 'Could not play that voice.');
     }
+  }
+
+  // Keep the refs current, and push equalizer + volume into a clip that is
+  // already playing so dragging those sliders is heard immediately.
+  useEffect(() => {
+    fxRef.current = fx;
+    demoHandleRef.current?.update(fx);
+  }, [fx]);
+  useEffect(() => { speedRef.current = voiceSpeed; }, [voiceSpeed]);
+
+  // Speed and pitch are baked into the clip before it plays, so they can't be
+  // bent mid-playback. Instead the test restarts once the slider settles. The
+  // Browser voice can't change anything mid-sentence, so volume restarts it too.
+  useEffect(() => {
+    const prev = prevTuneRef.current;
+    prevTuneRef.current = { speed: voiceSpeed, pitch: fx.pitch, volume: fx.volume };
+    if (!prev || !playingDemo) return;
+    const last = lastDemoRef.current;
+    if (!last || last.previewUrl) return;
+    const changed = prev.speed !== voiceSpeed || prev.pitch !== fx.pitch
+      || (last.provider === 'browser' && prev.volume !== fx.volume);
+    if (!changed) return;
+    const timer = setTimeout(() => playDemo(last.voiceId, last.provider, null, { restart: true }), 350);
+    return () => clearTimeout(timer);
+  }, [voiceSpeed, fx.pitch, fx.volume]);
+
+  function applyPreset(preset) {
+    setFx(f => ({ ...f, pitch: preset.pitch, eq: [...preset.eq] }));
+  }
+
+  function resetTuning() {
+    setVoiceSpeed(DEFAULT_TTS_SPEED);
+    setFx(normalizeVoiceFx(null));
   }
 
   // ── Design a Voice ──────────────────────────────────────────────────
@@ -336,6 +502,11 @@ export default function SettingsPage() {
   const voiceMap     = { google: googleVoice, elevenlabs: elVoice, openai: oaVoice, orpheus: orVoice };
   const voiceSetters = { google: setGoogleVoice, elevenlabs: setElVoice, openai: setOaVoice, orpheus: setOrVoice };
   const voiceLists   = { google: GOOGLE_VOICES, elevenlabs: elVoices, openai: OPENAI_VOICES, orpheus: ORPHEUS_VOICES };
+
+  const isBrowserVoice = ttsProvider === 'browser';
+  const activePreset   = matchingPreset(fx);
+  // What the Test button plays: the voice currently selected for this provider
+  const testVoiceId    = isBrowserVoice ? BROWSER_TEST_ID : voiceMap[ttsProvider];
 
   return (
     <main className={styles.page}>
@@ -495,17 +666,73 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className={styles.speedRow}>
-          <span className={styles.speedLabel}>Speed</span>
-          <div className={styles.speedPills}>
-            {[0.75, 1.0, 1.25, 1.5, 1.75].map(s => (
+        <div className={styles.tuneSection}>
+          <div className={styles.tuneHead}>
+            <span className={styles.tuneTitle}>Voice Tuning</span>
+            <button className={styles.tuneReset} onClick={resetTuning}>Reset</button>
+          </div>
+
+          <div className={styles.tunePresets}>
+            {VOICE_FX_PRESETS.map(p => (
               <button
-                key={s}
-                className={`${styles.speedPill} ${voiceSpeed === s ? styles.speedPillActive : ''}`}
-                onClick={() => setVoiceSpeed(s)}
-              >{s === 1.0 ? '1× Normal' : `${s}×`}</button>
+                key={p.id}
+                className={`${styles.tunePreset} ${activePreset === p.id ? styles.tunePresetActive : ''}`}
+                onClick={() => applyPreset(p)}
+              >{p.label}</button>
             ))}
           </div>
+
+          <TuneSlider
+            label="Speed"
+            display={`${voiceSpeed.toFixed(2)}×`}
+            min={SPEED_MIN} max={SPEED_MAX} step={0.05}
+            value={voiceSpeed}
+            onChange={setVoiceSpeed}
+          />
+          <TuneSlider
+            label="Pitch" hint="lower ↔ higher"
+            display={fx.pitch === 0 ? 'Normal' : signed(fx.pitch)}
+            min={-PITCH_RANGE} max={PITCH_RANGE} step={0.5}
+            value={fx.pitch}
+            onChange={v => setFx(f => ({ ...f, pitch: v }))}
+          />
+          <TuneSlider
+            label="Volume"
+            display={`${Math.round(fx.volume * 100)}%`}
+            min={0} max={VOLUME_MAX} step={0.05}
+            value={fx.volume}
+            onChange={v => setFx(f => ({ ...f, volume: v }))}
+          />
+
+          <div className={styles.tuneEq}>
+            <span className={styles.tuneGroupLabel}>Equalizer</span>
+            {isBrowserVoice && (
+              <p className={styles.designNote}>
+                Not available for the Browser voice. Your device speaks it directly, so the app never gets the sound to filter. Switch to Google to use these.
+              </p>
+            )}
+            {EQ_BANDS.map((band, i) => (
+              <TuneSlider
+                key={band.id}
+                label={band.label} hint={band.hint}
+                display={fx.eq[i] === 0 ? '0' : `${signed(fx.eq[i])} dB`}
+                min={-EQ_RANGE_DB} max={EQ_RANGE_DB} step={1}
+                value={fx.eq[i]}
+                disabled={isBrowserVoice}
+                onChange={v => setFx(f => ({ ...f, eq: f.eq.map((db, j) => (j === i ? v : db)) }))}
+              />
+            ))}
+          </div>
+
+          <button
+            className={styles.designGenBtn}
+            onClick={() => playDemo(testVoiceId, ttsProvider, null)}
+            disabled={!testVoiceId}
+          >
+            {playingDemo && playingDemo === testVoiceId ? '■ Stop' : '▶ Test voice'}
+          </button>
+          {demoError && <p className={styles.designError}>{demoError}</p>}
+          <p className={styles.designNote}>Tap Save Settings below to use this tuning in chat.</p>
         </div>
       </section>
 
