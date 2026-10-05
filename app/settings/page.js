@@ -310,7 +310,9 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {ttsProvider !== 'browser' && (
+        {ttsProvider === 'browser' ? (
+          <p className={styles.sectionDesc}>Browser uses your device&apos;s built-in voice automatically — no selection needed. Switch to Google for higher quality.</p>
+        ) : (
           <div className={styles.voiceList}>
             {(voiceLists[ttsProvider] ?? []).map(v => (
               <button
