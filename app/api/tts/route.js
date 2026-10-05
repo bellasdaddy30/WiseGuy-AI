@@ -1,5 +1,25 @@
-import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG } from '../../../lib/tts';
+import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG, PERSONA_ELEVENLABS_VOICE } from '../../../lib/tts';
 import { getApiKey } from '../../../lib/providers';
+import { trimTrailingBurst } from '../../../lib/pcmTail';
+
+export const maxDuration = 30;
+
+// Fade the first and last 5ms of 16-bit LE PCM to silence to prevent click artifacts
+function applyFades(pcm, sampleRate, fadeSecs = 0.02) {
+  // Ensure byte-aligned to 16-bit samples
+  const buf = pcm.length % 2 === 0 ? pcm : pcm.slice(0, -1);
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const totalSamples = buf.length / 2;
+  const fadeSamples  = Math.min(Math.floor(sampleRate * fadeSecs), Math.floor(totalSamples / 2));
+  for (let i = 0; i < fadeSamples; i++) {
+    const gain   = i / fadeSamples;
+    const inOff  = i * 2;
+    const outOff = (totalSamples - 1 - i) * 2;
+    view.setInt16(inOff,  Math.round(view.getInt16(inOff,  true) * gain), true);
+    view.setInt16(outOff, Math.round(view.getInt16(outOff, true) * gain), true);
+  }
+  return buf;
+}
 
 function buildWavHeader(pcmBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
   const buf  = new ArrayBuffer(44);
@@ -75,9 +95,16 @@ async function googleTts(text, voiceName, persona) {
     return Response.json({ error: 'No audio in Google TTS response.' }, { status: 502 });
   }
 
-  const pcm    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const rawPcm = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const rateM  = mime.match(/rate=(\d+)/);
   const rate   = rateM ? parseInt(rateM[1]) : 24000;
+  // Google sometimes adds a burst of noise after the voice has finished (the
+  // "scratched record" at the end of a reply). Cut it before anything else.
+  const { pcm: cleanPcm, info: tail } = trimTrailingBurst(rawPcm, rate);
+  // Logged whenever a clip ends with a short sound after a pause, trimmed or
+  // not, so the Vercel logs show how often this fires and what it measured.
+  if (tail) console.log('[tts/google] tail', JSON.stringify(tail));
+  const pcm    = applyFades(cleanPcm, rate);
   const header = buildWavHeader(pcm.length, rate);
   const wav    = new Uint8Array(header.length + pcm.length);
   wav.set(header);
@@ -90,6 +117,9 @@ async function elevenLabsTts(rawText, voiceId, persona) {
   const tag  = PERSONA_ELEVENLABS_TAG[persona];
   const text = tag ? `${tag} ${rawText}` : rawText;
 
+  // Each persona has its own voice actor — override the user's generic pick.
+  const resolvedVoiceId = PERSONA_ELEVENLABS_VOICE[persona] ?? voiceId;
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -99,7 +129,7 @@ async function elevenLabsTts(rawText, voiceId, persona) {
   }
 
   const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}`,
     {
       method: 'POST',
       headers: {
@@ -172,16 +202,84 @@ async function openAiTts(text, voice, persona) {
   return new Response(res.body, { headers: { 'Content-Type': 'audio/mpeg' } });
 }
 
+// Inject Orpheus emotion tags at sentence boundaries based on persona.
+// Tags like <laugh>, <sigh>, <chuckle> trigger real vocal reactions.
+function injectOrpheusEmotions(text, persona) {
+  const rules = {
+    wiseguy:        { tag: '<chuckle>', every: 3 },
+    roast_master:   { tag: '<laugh>',   every: 2 },
+    hype_man:       { tag: '<laugh>',   every: 2 },
+    unfiltered:     { tag: '<sigh>',    every: 3 },
+    conspiracy_nut: { tag: '<gasp>',    every: 3 },
+    coach:          { tag: '<groan>',   every: 3 },
+    therapist:      { tag: '<sigh>',    every: 3 },
+    philosopher:    { tag: '<sigh>',    every: 3 },
+    pirate:         { tag: '<laugh>',   every: 2 },
+    evil_genius:    { tag: '<laugh>',   every: 2 },
+    street_smart:   { tag: '<chuckle>', every: 3 },
+  };
+  const rule = rules[persona];
+  if (!rule) return text;
+  const parts = text.match(/[^.!?]+[.!?]+\s*/g) || [text];
+  return parts.map((s, i) =>
+    (i + 1) % rule.every === 0 ? s.trimEnd() + ` ${rule.tag} ` : s
+  ).join('');
+}
+
+async function orpheusTts(text, voice, persona) {
+  const apiKey = getApiKey('groq');
+  if (!apiKey) {
+    return Response.json({ error: 'Groq key not set. Add GROQ_API_KEY to .env.local.' }, { status: 500 });
+  }
+
+  const enhanced = injectOrpheusEmotions(text, persona);
+
+  const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'canopylabs/orpheus-v1-english',
+      voice: voice || 'tara',
+      input: enhanced,
+      response_format: 'wav',
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    console.error('[tts/orpheus]', res.status, JSON.stringify(body).slice(0, 200));
+    if (res.status === 429) {
+      return Response.json({ error: 'Orpheus rate limited — try again in a moment.' }, { status: 429 });
+    }
+    return Response.json({ error: `Orpheus TTS error ${res.status}.` }, { status: 502 });
+  }
+
+  return new Response(res.body, { headers: { 'Content-Type': 'audio/wav' } });
+}
+
+const MAX_TTS_CHARS = 4000;
+
 export async function POST(request) {
-  const { text, provider, voice, persona } = await request.json();
+  let body;
+  try { body = await request.json(); } catch {
+    return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+  const { text, provider, voice, persona } = body;
 
   if (!text?.trim()) {
     return Response.json({ error: 'No text provided.' }, { status: 400 });
+  }
+  if (text.length > MAX_TTS_CHARS) {
+    return Response.json({ error: `Text too long for TTS (${text.length} chars, max ${MAX_TTS_CHARS}).` }, { status: 400 });
   }
 
   if (provider === 'google')      return googleTts(text, voice || 'Aoede', persona);
   if (provider === 'elevenlabs')  return elevenLabsTts(text, voice || 'N2lVS1w4EtoT3dr4eOWO', persona);
   if (provider === 'openai')      return openAiTts(text, voice || 'ash', persona);
+  if (provider === 'orpheus')     return orpheusTts(text, voice || 'autumn', persona);
 
   return Response.json({ error: 'Unknown TTS provider.' }, { status: 400 });
 }

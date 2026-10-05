@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -5,23 +7,50 @@
 }
 
 :root {
-  --bg: #0f0f11;
-  --surface: #1a1a1f;
-  --border: #2e2e36;
-  --accent: #7c6af7;
-  --accent-dim: #4a3fbf;
-  --text: #e8e8f0;
-  --text-muted: #888899;
-  --nav-height: 56px;
+  /* ── Core palette ─────────────────────────────── */
+  --bg:           #08080c;
+  --bg-2:         #0e0e14;
+  --surface:      #111118;
+  --surface-2:    #17171f;
+  --surface-3:    #1e1e28;
+  --border:       #242430;
+  --border-light: #1c1c26;
+
+  /* ── Accent ───────────────────────────────────── */
+  --accent:       #7c6af7;
+  --accent-bright:#9d8fff;
+  --accent-dim:   #3d3480;
+  --accent-glow:  rgba(124, 106, 247, 0.18);
+  --accent-subtle:rgba(124, 106, 247, 0.07);
+
+  /* ── Text ─────────────────────────────────────── */
+  --text:         #ededf5;
+  --text-2:       #b0b0c8;
+  --text-muted:   #6e6e90;
+  --text-dim:     #40405a;
+
+  /* ── Semantic ─────────────────────────────────── */
+  --success:      #22c55e;
+  --danger:       #ef4444;
+  --warning:      #f59e0b;
+
+  /* ── Layout ───────────────────────────────────── */
+  --nav-height:   60px;
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+  --radius-xl:    24px;
 }
 
 html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -29,8 +58,21 @@ a {
   text-decoration: none;
 }
 
+/* ── Scrollbar ───────────────────────────────────── */
+::-webkit-scrollbar            { width: 6px; height: 6px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover{ background: var(--text-dim); }
+
+/* ── Selection ───────────────────────────────────── */
+::selection {
+  background: rgba(124, 106, 247, 0.28);
+  color: var(--text);
+}
+
+/* ── Default main ────────────────────────────────── */
 main {
-  padding: 2rem 1rem;
+  padding: 2.5rem 1.25rem;
   max-width: 900px;
   margin: 0 auto;
 }

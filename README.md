@@ -1,2 +1,2 @@
-# Smartass-AI
-Smartass chatbot app
+# WiseGuy AI
+WiseGuy chatbot app

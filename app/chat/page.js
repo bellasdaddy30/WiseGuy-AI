@@ -3,27 +3,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatMessage from '../../components/ChatMessage';
 import HistorySidebar from '../../components/HistorySidebar';
-import { MODELS, DEFAULT_MODEL } from '../../lib/models';
+import { MODELS, DEFAULT_MODEL, MODEL_KEY } from '../../lib/models';
 import { DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
+import { getMemory } from '../../lib/memory';
 import { loadHistory, saveConversation, deleteConversation, makeConvId, convTitle } from '../../lib/history';
 import {
   stripMarkdown, truncateForTts, nextVoice, findSpeechCut,
   BROWSER_SEGMENT_STYLE,
-  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, PERSONA_BROWSER_TTS,
-  TTS_PROVIDER_KEY, TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY,
-  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE,
+  GOOGLE_VOICES, ELEVENLABS_VOICES, OPENAI_VOICES, ORPHEUS_VOICES, PERSONA_BROWSER_TTS,
+  TTS_PROVIDER_KEY, TTS_SPEED_KEY,
+  TTS_VOICE_GOOGLE_KEY, TTS_VOICE_ELEVENLABS_KEY, TTS_VOICE_OPENAI_KEY, TTS_VOICE_ORPHEUS_KEY,
+  DEFAULT_TTS_PROVIDER, DEFAULT_GOOGLE_VOICE, DEFAULT_ELEVENLABS_VOICE, DEFAULT_OPENAI_VOICE, DEFAULT_ORPHEUS_VOICE,
+  DEFAULT_TTS_SPEED,
+  VOICE_MODE_KEY, AI_VOICE_KEY, HANDS_FREE_KEY,
 } from '../../lib/tts';
 import { splitVoiceSegments, toProviderTags } from '../../lib/voiceTags';
+import { DEFAULT_VOICE_FX, loadVoiceFx, browserVoiceParams, playTuned } from '../../lib/voicefx';
 import styles from './chat.module.css';
 
-const ERROR_REPLY      = "The AI service isn't responding right now.";
-const MODEL_KEY        = 'smartass_model';
-const VOICE_MODE_KEY   = 'smartass_voice_mode';
-const AI_VOICE_KEY     = 'smartass_ai_voice';
-const HANDS_FREE_KEY   = 'smartass_hands_free';
+const ERROR_REPLY = "The AI service isn't responding right now.";
 
-const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai'];
-const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI' };
+const TTS_PROVIDERS = ['browser', 'google', 'elevenlabs', 'openai', 'orpheus'];
+const TTS_LABELS    = { browser: 'Browser', google: 'Google', elevenlabs: 'ELabs', openai: 'OpenAI', orpheus: 'Orpheus' };
 
 export default function ChatPage() {
   const [messages, setMessages]         = useState([
@@ -42,9 +43,13 @@ export default function ChatPage() {
   const [elVoice, setElVoice]           = useState(DEFAULT_ELEVENLABS_VOICE);
   const [elVoices, setElVoices]         = useState(ELEVENLABS_VOICES);
   const [oaVoice, setOaVoice]           = useState(DEFAULT_OPENAI_VOICE);
+  const [orVoice, setOrVoice]           = useState(DEFAULT_ORPHEUS_VOICE);
   const [micError, setMicError]         = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [convHistory, setConvHistory]   = useState([]);
+  const [alwaysOn, setAlwaysOn]         = useState(false);
+  const [micMuted, setMicMuted]         = useState(false);
+  const [ttsSpeed, setTtsSpeed]         = useState(DEFAULT_TTS_SPEED);
 
   const convIdRef      = useRef(null);
   const convCreatedRef = useRef(null);
@@ -66,8 +71,16 @@ export default function ChatPage() {
   const googleVoiceRef = useRef(googleVoice);
   const elVoiceRef     = useRef(elVoice);
   const oaVoiceRef     = useRef(oaVoice);
-  const loadingRef     = useRef(loading);
-  const messagesRef    = useRef(messages);
+  const orVoiceRef     = useRef(orVoice);
+  const ttsSpeedRef         = useRef(DEFAULT_TTS_SPEED);
+  // Voice Tuning from Settings (pitch, volume, equalizer). Read once on load.
+  const voiceFxRef          = useRef(DEFAULT_VOICE_FX);
+  const loadingRef          = useRef(loading);
+  const messagesRef         = useRef(messages);
+  const alwaysOnRef         = useRef(false);
+  const micMutedRef         = useRef(false);
+  const continuousActiveRef = useRef(false);
+  const submitTextRef       = useRef(null);
 
   useEffect(() => { voiceModeRef.current     = voiceMode;   }, [voiceMode]);
   useEffect(() => { aiVoiceRef.current       = aiVoice;     }, [aiVoice]);
@@ -76,8 +89,12 @@ export default function ChatPage() {
   useEffect(() => { googleVoiceRef.current   = googleVoice; }, [googleVoice]);
   useEffect(() => { elVoiceRef.current       = elVoice;     }, [elVoice]);
   useEffect(() => { oaVoiceRef.current       = oaVoice;     }, [oaVoice]);
+  useEffect(() => { orVoiceRef.current       = orVoice;     }, [orVoice]);
+  useEffect(() => { ttsSpeedRef.current      = ttsSpeed;    }, [ttsSpeed]);
   useEffect(() => { loadingRef.current       = loading;     }, [loading]);
   useEffect(() => { messagesRef.current      = messages;    }, [messages]);
+  useEffect(() => { alwaysOnRef.current      = alwaysOn;   }, [alwaysOn]);
+  useEffect(() => { micMutedRef.current      = micMuted;   }, [micMuted]);
 
   useEffect(() => {
     // Load conversation history
@@ -120,6 +137,11 @@ export default function ChatPage() {
       if (ev && ELEVENLABS_VOICES.some(v => v.id === ev)) setElVoice(ev);
       const ov = localStorage.getItem(TTS_VOICE_OPENAI_KEY);
       if (ov && OPENAI_VOICES.some(v => v.id === ov)) setOaVoice(ov);
+      const rv = localStorage.getItem(TTS_VOICE_ORPHEUS_KEY);
+      if (rv && ORPHEUS_VOICES.some(v => v.id === rv)) setOrVoice(rv);
+      const spd = parseFloat(localStorage.getItem(TTS_SPEED_KEY));
+      if (spd > 0) { setTtsSpeed(spd); ttsSpeedRef.current = spd; }
+      voiceFxRef.current = loadVoiceFx();
     } catch {}
     inputRef.current?.focus();
   }, []);
@@ -133,7 +155,16 @@ export default function ChatPage() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       if (!audioCtxRef.current) audioCtxRef.current = new AC();
-      if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      // iOS Safari requires an actual sound played in the gesture handler to unlock
+      // the audio session — just creating/resuming the context isn't enough.
+      // A 1-sample silent buffer is inaudible but satisfies the requirement.
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
     } catch {}
   }
 
@@ -145,19 +176,158 @@ export default function ChatPage() {
     window.speechSynthesis?.cancel();
   }
 
+  // ── Always-on continuous listening loop ───────────────────────────────────
+  // Restarts itself after each utterance. Submits when SR fires onend with text.
+  // Pauses while loading so we don't queue a second message mid-response.
+  // Detects speech during AI audio playback and cuts the audio (interrupt).
+  function runContinuousListening() {
+    if (!continuousActiveRef.current || micMutedRef.current) return;
+    if (loadingRef.current) {
+      // AI is still fetching/streaming — check back and restart once it's done
+      setTimeout(() => runContinuousListening(), 600);
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.continuous     = false; // one utterance per session; auto-restart keeps it going
+    rec.interimResults = true;
+    rec.lang           = 'en-US';
+
+    let sessionTranscript = '';
+
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('');
+      sessionTranscript = t;
+      transcriptRef.current = t;
+      setInput(t);
+      // Cut the AI's audio the moment the user starts speaking
+      if (t.trim() && speechRef.current) stopAudio();
+    };
+
+    rec.onend = () => {
+      setListening(false);
+      const final = sessionTranscript.trim();
+      sessionTranscript = '';
+      transcriptRef.current = '';
+      if (final && !loadingRef.current) {
+        // Use the ref so we always get the latest version of submitText
+        (submitTextRef.current ?? submitText)(final);
+        setInput('');
+      } else {
+        setInput('');
+      }
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 400);
+    };
+
+    rec.onerror = (e) => {
+      setListening(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        continuousActiveRef.current = false;
+        setAlwaysOn(false);
+        const msg = srErrorMessage(e.error, detectIOS());
+        if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 6000); }
+        return;
+      }
+      // 'no-speech', 'aborted' — restart silently; other errors show a message
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        const msg = srErrorMessage(e.error, detectIOS());
+        if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 5000); }
+      }
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
+    };
+
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+      setListening(true);
+    } catch (err) {
+      if (continuousActiveRef.current) setTimeout(() => runContinuousListening(), 500);
+    }
+  }
+
+  function toggleAlwaysOn() {
+    const next = !alwaysOnRef.current;
+    setAlwaysOn(next);
+    alwaysOnRef.current = next;
+    if (next) {
+      unlockAudioContext();
+      // Auto-enable AI voice when entering always-on mode
+      if (!aiVoiceRef.current) {
+        setAiVoice(true);
+        aiVoiceRef.current = true;
+        try { localStorage.setItem(AI_VOICE_KEY, 'true'); } catch {}
+      }
+      setMicMuted(false);
+      micMutedRef.current = false;
+      continuousActiveRef.current = true;
+      runContinuousListening();
+    } else {
+      continuousActiveRef.current = false;
+      recognitionRef.current?.stop();
+      setListening(false);
+      setMicMuted(false);
+      micMutedRef.current = false;
+    }
+  }
+
+  function toggleMicMuted() {
+    const next = !micMutedRef.current;
+    setMicMuted(next);
+    micMutedRef.current = next;
+    if (next) {
+      recognitionRef.current?.stop();
+      setListening(false);
+    } else {
+      runContinuousListening();
+    }
+  }
+
+  // Detects iOS/iPadOS including iPads that report a Mac user-agent in desktop mode
+  function detectIOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function srErrorMessage(error, isIOS) {
+    switch (error) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return isIOS
+          ? 'Mic blocked. Go to Settings → Safari → Microphone, allow this site, then reload the page and try again.'
+          : 'Mic blocked. Click the lock icon in your browser address bar and allow the microphone.';
+      case 'network':
+        return 'Voice input requires HTTPS — use the wiseguy-ai.vercel.app URL, not localhost.';
+      case 'audio-capture':
+        return 'Microphone not found or it\'s in use by another app.';
+      case 'no-speech':
+        return null; // not an error — user just didn't speak
+      default:
+        return `Voice error (${error}). Make sure you\'re in Safari on iOS with HTTPS.`;
+    }
+  }
+
   // startListening is defined here so the speech queue can call it after audio ends
   function startListening() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const isIOS = detectIOS();
+    const SR    = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setMicError('Voice input needs HTTPS. Works when the app is deployed.');
-      setTimeout(() => setMicError(''), 4000);
+      setMicError(isIOS
+        ? 'Voice input only works in Safari on iOS — open this page in Safari.'
+        : 'Voice input not supported in this browser.'
+      );
+      setTimeout(() => setMicError(''), 5000);
       return;
     }
     if (loadingRef.current) return;
-
     stopAudio();
     setMicError('');
 
+    // Create the SR instance synchronously while the user-gesture context is
+    // still active. iOS Safari drops gesture context as soon as we go async,
+    // so rec.start() must be called synchronously on iOS.
     const rec = new SR();
     rec.continuous     = false;
     rec.interimResults = true;
@@ -178,22 +348,39 @@ export default function ChatPage() {
     };
     rec.onerror = (e) => {
       setListening(false);
-      if (e.error === 'not-allowed') {
-        setMicError('Microphone access denied. Check browser permissions.');
-        setTimeout(() => setMicError(''), 4000);
-      } else if (e.error === 'network') {
-        setMicError('Voice input requires HTTPS. Works when deployed.');
-        setTimeout(() => setMicError(''), 4000);
-      }
+      const msg = srErrorMessage(e.error, isIOS);
+      if (msg) { setMicError(msg); setTimeout(() => setMicError(''), 6000); }
     };
 
-    try {
-      rec.start();
-      recognitionRef.current = rec;
-      setListening(true);
-    } catch {
-      setMicError('Voice input not available in this browser.');
-      setTimeout(() => setMicError(''), 4000);
+    function beginRecognition() {
+      try {
+        rec.start();
+        recognitionRef.current = rec;
+        setListening(true);
+      } catch (err) {
+        setMicError(isIOS
+          ? 'Mic failed to start. Make sure you\'re in Safari and the mic is allowed in Settings.'
+          : `Voice input failed to start: ${err?.message ?? 'unknown error'}`
+        );
+        setTimeout(() => setMicError(''), 6000);
+      }
+    }
+
+    // iOS/iPadOS: call rec.start() synchronously — the SR API handles its own
+    // permission flow and calling getUserMedia first breaks the gesture context.
+    if (isIOS || !navigator.mediaDevices?.getUserMedia) {
+      beginRecognition();
+    } else {
+      // Android / Desktop: getUserMedia first to surface the browser permission dialog.
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          stream.getTracks().forEach(t => t.stop());
+          beginRecognition();
+        })
+        .catch(() => {
+          setMicError('Mic blocked. Click the lock icon in your address bar and allow the microphone.');
+          setTimeout(() => setMicError(''), 6000);
+        });
     }
   }
 
@@ -245,7 +432,7 @@ export default function ChatPage() {
     if (q.spent + text.length > budget) text = truncateForTts(text, budget - q.spent);
     q.spent += text.length;
 
-    const persona = personality?.persona ?? 'smartass';
+    const persona = personality?.persona ?? 'wiseguy';
     const item = { provider, text, persona };
     // Start fetching the audio now, while earlier chunks are still playing.
     if (provider !== 'browser') item.audio = fetchSpeechAudio(text, provider, persona);
@@ -255,8 +442,9 @@ export default function ChatPage() {
 
   async function fetchSpeechAudio(text, provider, persona) {
     try {
-      const voice = provider === 'google' ? googleVoiceRef.current
-                  : provider === 'openai' ? oaVoiceRef.current
+      const voice = provider === 'google'   ? googleVoiceRef.current
+                  : provider === 'openai'   ? oaVoiceRef.current
+                  : provider === 'orpheus'  ? orVoiceRef.current
                   : elVoiceRef.current;
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -298,6 +486,7 @@ export default function ChatPage() {
 
       const speakWithBrowser = () => {
         const browserStyle = PERSONA_BROWSER_TTS[item.persona] ?? { rate: 1.05, pitch: 1.0 };
+        const tune = browserVoiceParams(voiceFxRef.current);
         const laughText = item.persona === 'evil_genius' ? 'Mwahahahaha!' : 'Ha ha ha!';
         const segments = splitVoiceSegments(item.text)
           .map(seg => seg.style === 'laugh' ? { ...seg, text: laughText } : seg)
@@ -306,9 +495,9 @@ export default function ChatPage() {
         segments.forEach((seg, i) => {
           const mod  = BROWSER_SEGMENT_STYLE[seg.style] ?? BROWSER_SEGMENT_STYLE.normal;
           const utt  = new SpeechSynthesisUtterance(seg.text);
-          utt.rate   = Math.min(2, browserStyle.rate * mod.rate);
-          utt.pitch  = Math.min(2, browserStyle.pitch * mod.pitch);
-          utt.volume = mod.volume;
+          utt.rate   = Math.min(2, browserStyle.rate * mod.rate * ttsSpeedRef.current);
+          utt.pitch  = Math.min(2, Math.max(0.1, browserStyle.pitch * mod.pitch * tune.pitch));
+          utt.volume = Math.min(1, mod.volume * tune.volume);
           if (i === segments.length - 1) { utt.onend = resolve; utt.onerror = resolve; }
           window.speechSynthesis.speak(utt);
         });
@@ -333,15 +522,19 @@ export default function ChatPage() {
         if (ctx) {
           const audioBuffer = await ctx.decodeAudioData(result.buffer);
           if (q.cancelled) return resolve();
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          source.onended = resolve;
-          sourceNodeRef.current = source;
-          source.start(0);
+          // Applies speed, pitch, volume and equalizer. With everything at its
+          // default this plays the clip untouched, wired straight to the speakers.
+          const playing = playTuned(ctx, audioBuffer, {
+            speed: ttsSpeedRef.current,
+            fx: voiceFxRef.current,
+            onended: resolve,
+          });
+          sourceNodeRef.current = playing.source;
         } else {
           const url   = URL.createObjectURL(new Blob([result.buffer]));
           const audio = new Audio(url);
+          // No Web Audio here, so tuning can't be applied. Speed still can.
+          audio.playbackRate = ttsSpeedRef.current;
           audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
           audioRef.current = audio;
           audio.play().catch(e => { console.error('[tts fallback]', e.message); resolve(); });
@@ -374,6 +567,7 @@ export default function ChatPage() {
         messages: [...history, userMsg],
         model,
         personality,
+        memory: getMemory(),
       };
 
       const res = await fetch('/api/chat', {
@@ -433,6 +627,10 @@ export default function ChatPage() {
     }
   }, [model, personality]); // eslint-disable-line
 
+  // Keep submitTextRef pointing at the latest submitText so the continuous loop
+  // never closes over a stale version (model or personality may have changed).
+  useEffect(() => { submitTextRef.current = submitText; }, [submitText]);
+
   function startNewChat() {
     stopAudio();
     recognitionRef.current?.stop();
@@ -482,6 +680,8 @@ export default function ChatPage() {
   }
 
   function handleMic() {
+    // In always-on mode the mic button is the mute toggle, not push-to-talk
+    if (alwaysOn) { toggleMicMuted(); return; }
     if (listening) { recognitionRef.current?.stop(); return; }
     startListening();
   }
@@ -521,6 +721,10 @@ export default function ChatPage() {
       const next = nextVoice(OPENAI_VOICES, oaVoice);
       setOaVoice(next);
       try { localStorage.setItem(TTS_VOICE_OPENAI_KEY, next); } catch {}
+    } else if (ttsProvider === 'orpheus') {
+      const next = nextVoice(ORPHEUS_VOICES, orVoice);
+      setOrVoice(next);
+      try { localStorage.setItem(TTS_VOICE_ORPHEUS_KEY, next); } catch {}
     }
   }
 
@@ -547,8 +751,8 @@ export default function ChatPage() {
         setAiVoice(true);
         try { localStorage.setItem(AI_VOICE_KEY, 'true'); } catch {}
       }
-      // Start listening right away
-      setTimeout(() => startListening(), 100);
+      // Start listening right away — must be synchronous on iOS (gesture context)
+      startListening();
     } else {
       stopAudio();
       recognitionRef.current?.stop();
@@ -563,6 +767,8 @@ export default function ChatPage() {
     ? elVoices.find(v => v.id === elVoice)?.name
     : ttsProvider === 'openai'
     ? OPENAI_VOICES.find(v => v.id === oaVoice)?.name
+    : ttsProvider === 'orpheus'
+    ? ORPHEUS_VOICES.find(v => v.id === orVoice)?.name
     : null;
 
   return (
@@ -590,53 +796,36 @@ export default function ChatPage() {
 
       <div className={styles.controlsBar}>
         <div className={styles.leftControls}>
-        <button
-          className={styles.historyBtn}
-          onClick={() => setSidebarOpen(o => !o)}
-          title="Conversation history"
-        >☰</button>
-        <span className={styles.modelName}>
-          {MODELS.find(m => m.id === model)?.name ?? model}
-        </span>
+          <button
+            className={styles.historyBtn}
+            onClick={() => setSidebarOpen(o => !o)}
+            title="Conversation history"
+          >☰ History</button>
+          {alwaysOn && !micMuted && (
+            <div className={styles.livePill}>
+              <span className={styles.liveDot} />
+              Live
+            </div>
+          )}
+          {alwaysOn && micMuted && (
+            <div className={styles.mutedPill}>Mic muted</div>
+          )}
         </div>
 
         <div className={styles.voiceToggles}>
           <button
-            className={`${styles.ctrlBtn} ${voiceMode === 'auto' ? styles.ctrlActive : ''}`}
-            onClick={toggleVoiceMode}
-            title={voiceMode === 'review' ? 'Review: fills field, you send manually' : 'Auto: sends when you stop talking'}
-          >
-            {voiceMode === 'review' ? 'Review' : 'Auto'}
-          </button>
-
-          <button
-            className={`${styles.ctrlBtn} ${handsFree ? styles.ctrlHandsFree : ''}`}
-            onClick={toggleHandsFree}
-            title="Hands-Free: AI talks back then listens automatically"
-          >
-            {handsFree ? '🎙️ Live' : '🎙️'}
-          </button>
-
-          <button
-            className={`${styles.ctrlBtn} ${ttsProvider !== 'browser' ? styles.ctrlActive : ''}`}
-            onClick={cycleProvider}
-            title="Cycle voice provider"
-          >
-            {TTS_LABELS[ttsProvider]}
-          </button>
-
-          {currentVoiceName && (
-            <button className={styles.ctrlBtn} onClick={cycleVoice} title="Cycle voice">
-              {currentVoiceName}
-            </button>
-          )}
-
-          <button
             className={`${styles.ctrlBtn} ${aiVoice ? styles.ctrlActive : ''}`}
             onClick={toggleAiVoice}
-            title={aiVoice ? 'AI voice on' : 'AI voice off'}
+            title={aiVoice ? 'AI voice on — tap to mute' : 'AI voice off — tap to unmute'}
           >
             {aiVoice ? '🔊' : '🔇'}
+          </button>
+          <button
+            className={`${styles.ctrlBtn} ${alwaysOn ? styles.ctrlActive : ''}`}
+            onClick={toggleAlwaysOn}
+            title={alwaysOn ? 'Always-on listening: ON — tap to stop' : 'Always-on listening: OFF — tap to start'}
+          >
+            🎙️ {alwaysOn ? 'On' : 'Off'}
           </button>
         </div>
       </div>
@@ -654,12 +843,20 @@ export default function ChatPage() {
         />
         <button
           type="button"
-          className={`${styles.micBtn} ${listening ? styles.micActive : ''}`}
+          className={`${styles.micBtn} ${
+            alwaysOn
+              ? (micMuted ? styles.micMuted : (listening ? styles.micActive : styles.micLive))
+              : (listening ? styles.micActive : '')
+          }`}
           onClick={handleMic}
-          disabled={loading}
-          title={listening ? 'Stop recording' : 'Voice input'}
+          disabled={loading && !alwaysOn}
+          title={
+            alwaysOn
+              ? (micMuted ? 'Tap to unmute mic' : 'Mic live — tap to mute')
+              : (listening ? 'Stop recording' : 'Voice input')
+          }
         >
-          🎤
+          {alwaysOn && micMuted ? '🔇' : '🎤'}
         </button>
         <button
           className={styles.sendBtn}

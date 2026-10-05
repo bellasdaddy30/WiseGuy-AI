@@ -1,0 +1,371 @@
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 4rem;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.betaBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.9rem;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #4ade80;
+  margin-bottom: 0.25rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(145deg, #ffffff 20%, var(--accent-bright) 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.6rem;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Plan cards ─────────────────────────── */
+.planGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.planCard {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.15s;
+}
+
+.planHighlight {
+  border-color: var(--accent);
+  background: rgba(124, 106, 247, 0.05);
+}
+
+.planPill {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.75rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.planName {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.planPriceRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem;
+}
+
+.planPrice {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.planPeriod {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.planDesc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.featureList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  margin-top: 0.25rem;
+}
+
+.featureItem {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.check {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ctaPrimary {
+  margin-top: 0.5rem;
+  padding: 0.7rem;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ctaSecondary {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ctaSecondary:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+/* ── Sections ───────────────────────────── */
+.section {
+  margin-bottom: 2.5rem;
+}
+
+.sectionTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-bottom: 0.875rem;
+}
+
+/* ── Personas ───────────────────────────── */
+.personaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.personaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.personaPro {
+  border-color: rgba(124, 106, 247, 0.35);
+  background: rgba(124, 106, 247, 0.04);
+}
+
+.personaItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.personaItemName {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.personaItemDesc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── TTS engines ────────────────────────── */
+.ttsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ttsItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ttsPro {
+  border-color: rgba(124, 106, 247, 0.35);
+  background: rgba(124, 106, 247, 0.04);
+}
+
+.ttsName {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.ttsDesc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* ── Roadmap ─────────────────────────────────── */
+.roadmapGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.roadmapCard {
+  display: flex;
+  gap: 0.875rem;
+  align-items: flex-start;
+  padding: 1rem 1.1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+}
+
+.roadmapIcon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.roadmapTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.3rem;
+}
+
+.roadmapDesc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-bottom: 0.5rem;
+}
+
+.roadmapTag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+/* ── Badges ─────────────────────────────── */
+.proBadge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #7c6af7, #a855f7);
+  color: white;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.freeBadge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.companionBadge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #e879a0, #f43f8e);
+  color: white;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.personaCompanion {
+  border-color: rgba(232, 121, 160, 0.3);
+  background: rgba(232, 121, 160, 0.04);
+}
+
+.planAddon {
+  border-color: rgba(232, 121, 160, 0.4);
+  background: rgba(232, 121, 160, 0.04);
+}
+
+/* ── Note ───────────────────────────────── */
+.note {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 1rem;
+  font-style: italic;
+}
+
+@media (max-width: 540px) {
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .personaGrid {
+    grid-template-columns: 1fr;
+  }
+}

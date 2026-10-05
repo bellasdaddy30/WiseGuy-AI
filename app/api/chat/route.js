@@ -2,6 +2,10 @@ import { getModel } from '../../../lib/models';
 import { getClient, getProviderLabel, MissingKeyError } from '../../../lib/providers';
 import { buildSystemPrompt } from '../../../lib/personality';
 
+// Vercel: allow up to 60s for streaming AI responses (requires Pro plan;
+// Hobby plan caps at 10s which can cut off long responses).
+export const maxDuration = 60;
+
 // Turn provider errors into something a person can act on.
 function describeError(err, providerLabel) {
   if (err instanceof MissingKeyError) return err.message;
@@ -14,15 +18,35 @@ function describeError(err, providerLabel) {
 }
 
 function creativityToTemp(c) {
-  // creativity 1–5 → temperature 0.4–1.3
-  return [0.4, 0.65, 0.85, 1.05, 1.3][(c ?? 3) - 1] ?? 0.85;
+  // creativity 1–4 → temperature 0.4–1.05 (capped; 5 from old stored data → 1.05)
+  return [0.4, 0.65, 0.85, 1.05][Math.min((c ?? 3), 4) - 1] ?? 0.85;
 }
 
+const MAX_MESSAGES    = 100;
+const MAX_MSG_CHARS   = 12000;
+const MAX_TOTAL_CHARS = 80000;
+
 export async function POST(request) {
-  const { messages, model: requestedModel, personality } = await request.json();
+  let body;
+  try { body = await request.json(); } catch {
+    return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+  const { messages, model: requestedModel, personality, memory } = body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'No messages provided.' }, { status: 400 });
+  }
+  if (messages.length > MAX_MESSAGES) {
+    return Response.json({ error: 'Too many messages in request.' }, { status: 400 });
+  }
+  const totalChars = messages.reduce((sum, m) => sum + (m?.content?.length ?? 0), 0);
+  if (totalChars > MAX_TOTAL_CHARS) {
+    return Response.json({ error: 'Message history too large.' }, { status: 400 });
+  }
+  for (const m of messages) {
+    if (typeof m?.content === 'string' && m.content.length > MAX_MSG_CHARS) {
+      return Response.json({ error: 'A single message exceeds the character limit.' }, { status: 400 });
+    }
   }
 
   const model = getModel(requestedModel);
@@ -33,7 +57,7 @@ export async function POST(request) {
     const client = getClient(model.provider);
     const reqBody = {
       model: model.id,
-      messages: [{ role: 'system', content: buildSystemPrompt(personality) }, ...messages],
+      messages: [{ role: 'system', content: buildSystemPrompt(personality, Array.isArray(memory) ? memory : []) }, ...messages],
       stream: true,
       temperature: creativityToTemp(personality?.creativity),
     };

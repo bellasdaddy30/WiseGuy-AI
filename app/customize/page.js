@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { PERSONAS, DEFAULT_PERSONALITY, PERSONALITY_KEY } from '../../lib/personality';
+import { isPersonaPro } from '../../lib/premium';
+import PremiumBadge from '../../components/PremiumBadge';
 import styles from './customize.module.css';
 
 const TONE_LABELS       = ['Chill', 'Relaxed', 'Balanced', 'Direct', 'Intense'];
 const HUMOR_LABELS      = ['Light', 'Mild', 'Funny', 'Very Funny', 'Sides Hurting'];
 const LENGTH_LABELS     = ['Minimal', 'Brief', 'Moderate', 'Thorough', 'Detailed'];
-const CREATIVITY_LABELS = ['Factual', 'Grounded', 'Balanced', 'Creative', 'Unbelievable'];
+const CREATIVITY_LABELS = ['Factual', 'Grounded', 'Balanced', 'Creative'];
 
 export default function CustomizePage() {
   const [settings, setSettings] = useState(DEFAULT_PERSONALITY);
@@ -35,7 +37,7 @@ export default function CustomizePage() {
   return (
     <main>
       <h1 className={styles.heading}>Customize</h1>
-      <p className={styles.sub}>Shape how SmartAss AI talks to you. Saved to this browser.</p>
+      <p className={styles.sub}>Shape how WiseGuy AI talks to you. Saved to this browser.</p>
 
       <section className={styles.section}>
         <h2 className={styles.sectionLabel}>Persona</h2>
@@ -46,7 +48,10 @@ export default function CustomizePage() {
               className={`${styles.personaCard} ${settings.persona === p.id ? styles.active : ''}`}
               onClick={() => update('persona', p.id)}
             >
-              <span className={styles.personaName}>{p.name}</span>
+              <span className={styles.personaNameRow}>
+                <span className={styles.personaName}>{p.name}</span>
+                {isPersonaPro(p.id) && <PremiumBadge />}
+              </span>
               <span className={styles.personaDesc}>{p.description}</span>
             </button>
           ))}
@@ -85,6 +90,7 @@ export default function CustomizePage() {
 }
 
 function Slider({ label, value, labels, onChange }) {
+  const max = labels.length;
   return (
     <div className={styles.sliderRow}>
       <div className={styles.sliderTop}>
@@ -93,9 +99,9 @@ function Slider({ label, value, labels, onChange }) {
       </div>
       <div className={styles.sliderTrack}>
         <div className={styles.sliderLine}>
-          <div className={styles.sliderFill} style={{ width: `${(value - 1) / 4 * 100}%` }} />
+          <div className={styles.sliderFill} style={{ width: `${(value - 1) / (max - 1) * 100}%` }} />
         </div>
-        {[1, 2, 3, 4, 5].map(v => (
+        {Array.from({ length: max }, (_, i) => i + 1).map(v => (
           <button
             key={v}
             className={`${styles.pip} ${value === v ? styles.pipActive : value > v ? styles.pipFilled : ''}`}
@@ -106,7 +112,7 @@ function Slider({ label, value, labels, onChange }) {
       </div>
       <div className={styles.sliderEnds}>
         <span>{labels[0]}</span>
-        <span>{labels[4]}</span>
+        <span>{labels[max - 1]}</span>
       </div>
     </div>
   );

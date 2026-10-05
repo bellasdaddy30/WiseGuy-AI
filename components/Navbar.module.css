@@ -1,68 +1,99 @@
 .nav {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.25rem;
   height: var(--nav-height);
-  padding: 0 1.25rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem;
+  background: rgba(8, 8, 12, 0.88);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid rgba(124, 106, 247, 0.12);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
+/* ── Brand ─────────────────────────────────────── */
 .brand {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 1.05rem;
-  color: var(--accent);
+  letter-spacing: -0.03em;
   white-space: nowrap;
   margin-right: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
 }
 
+.brandWise {
+  color: var(--text);
+}
+
+.brandGuy {
+  background: linear-gradient(135deg, #7c6af7, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brandAI {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+}
+
+/* ── Nav links ─────────────────────────────────── */
 .links {
   display: flex;
   list-style: none;
-  gap: 0.25rem;
+  gap: 0;
 }
 
 .link {
   display: block;
   padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--text-muted);
   transition: color 0.15s, background 0.15s;
 }
 
 .link:hover {
   color: var(--text);
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.active {
+.link.active {
   color: var(--text);
-  background: var(--accent-dim);
+  background: rgba(124, 106, 247, 0.12);
+  border-radius: var(--radius-sm);
 }
 
-@media (max-width: 600px) {
+/* ── Mobile ────────────────────────────────────── */
+@media (max-width: 640px) {
   .nav {
     flex-wrap: wrap;
     height: auto;
     padding: 0.5rem 1rem;
-    gap: 0.5rem;
+    gap: 0.25rem;
   }
 
   .brand {
-    margin-right: 0;
+    font-size: 0.95rem;
   }
 
   .links {
+    order: 3;
+    width: 100%;
     flex-wrap: wrap;
-    gap: 0.15rem;
+    padding-bottom: 0.4rem;
+    gap: 0;
   }
 
   .link {
-    font-size: 0.82rem;
-    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.55rem;
   }
 }
