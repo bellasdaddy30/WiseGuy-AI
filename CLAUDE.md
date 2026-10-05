@@ -1,7 +1,8 @@
 # WiseGuy AI (formerly SmartAss AI) — Project Notes for Claude Code
 
-Renamed from SmartAss AI to **WiseGuy AI** on 2026-10-05. The GitHub repo is still
-`bellasdaddy30/Smartass-AI`; the package name is `wiseguy-ai`. Read this fully first.
+Renamed from SmartAss AI to **WiseGuy AI** on 2026-10-05. The GitHub repo is
+`bellasdaddy30/WiseGuy-AI` (the old `Smartass-AI` URL still redirects); the package
+name is `wiseguy-ai`. Read this fully first.
 
 ## Who you're working with
 
@@ -36,6 +37,19 @@ quota. They are gated **on the server** by `lib/adminAuth.js`: `/api/admin-unloc
 checks `ADMIN_PIN` and sets a signed httpOnly cookie (signed with `AUTH_SECRET`); the
 paid routes call `isAdmin(request)`. With no `ADMIN_PIN`, paid features are open in
 `npm run dev` and closed in production. Never gate paid features only in the UI.
+
+## Deploys (how to tell a change is live)
+
+- Every push to `main` builds on Vercel and should go live at `wiseguy-ai.vercel.app`.
+- **Settings → App Version** in the app (`components/BuildCheck.js`, `/api/version`,
+  stamped in `next.config.mjs`) shows the commit this screen is running, the commit the
+  server is serving, and the newest commit on GitHub. Check it after a push instead of
+  assuming the deploy landed.
+- This repo is also edited from cloud Claude sessions, so the copy on Ragnarok is often
+  behind `main`.
+- Vercel **Instant Rollback** turns off automatic updates for the public address until
+  **Undo Rollback** is clicked on the project's production tile. That froze the address
+  for a day on 2026-10-05. Don't roll back without telling Chris it has to be undone.
 
 ## Product vision (condensed from Chris's brief)
 
@@ -91,6 +105,8 @@ Inspect actual file contents before changing anything — don't overwrite blind.
 - No dumping hundreds of lines at once; build in small, verified steps.
 - Don't add dependencies without a reason. Prefer free/open-source; flag any cost.
 - No fake auth or payments presented as production-ready.
+- Before changing anything, run `git pull --ff-only origin main`. If it refuses, stop and
+  tell Chris; don't force it.
 - Ask before destructive git operations (force-push, reset --hard, rm).
 - After each step is verified working in the browser, commit with a descriptive message and push to main immediately. Never commit `.env` files of any kind.
 
