@@ -47,11 +47,15 @@ export default function SettingsPage() {
   const [oaVoice,     setOaVoice]     = useState(DEFAULT_OPENAI_VOICE);
   const [orVoice,     setOrVoice]     = useState(DEFAULT_ORPHEUS_VOICE);
   const [aiVoice,     setAiVoice]     = useState(true);
+  // FIX: was 'on', which is not one of the VOICE_MODES ids, so no card could ever match it.
   const [voiceMode,   setVoiceMode]   = useState('off');
 
   // Voice demo
   const [playingDemo, setPlayingDemo] = useState(null);
   const demoAudioRef = useRef(null);
+  // FIX: counter that goes up on every stop. A preview that is still loading
+  // compares against it and bails out if a newer tap has happened since.
+  const demoReqRef = useRef(0);
 
   // Design a Voice
   const [dvOpen,           setDvOpen]           = useState(false);
@@ -114,6 +118,20 @@ export default function SettingsPage() {
     if (resolvedTp === 'elevenlabs') fetchElVoices();
   }, []);
 
+  // FIX: stop any preview audio when leaving the Settings page,
+  // otherwise it keeps playing with no way to stop it.
+  useEffect(() => () => {
+    demoReqRef.current += 1;
+    const audio = demoAudioRef.current;
+    if (audio) {
+      audio.onended = audio.onerror = null;
+      audio.pause();
+      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
+      demoAudioRef.current = null;
+    }
+    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+  }, []);
+
   function handleSave() {
     save(TTS_PROVIDER_KEY, ttsProvider);
     save(TTS_SPEED_KEY, voiceSpeed);
@@ -165,6 +183,7 @@ export default function SettingsPage() {
     setOrVoice(DEFAULT_ORPHEUS_VOICE);
     setVoiceSpeed(DEFAULT_TTS_SPEED);
     setAiVoice(true);
+    // FIX: was 'on' (not a real mode). 'off' matches what a fresh load with empty storage gives.
     setVoiceMode('off');
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -190,7 +209,14 @@ export default function SettingsPage() {
 
   // ── Voice demo ──────────────────────────────────────────────────────
   function stopDemo() {
-    if (demoAudioRef.current) { demoAudioRef.current.pause(); demoAudioRef.current = null; }
+    demoReqRef.current += 1; // cancels any preview that is still loading
+    const audio = demoAudioRef.current;
+    if (audio) {
+      audio.onended = audio.onerror = null;
+      audio.pause();
+      if (audio._blobUrl) URL.revokeObjectURL(audio._blobUrl);
+      demoAudioRef.current = null;
+    }
     window.speechSynthesis?.cancel();
     setPlayingDemo(null);
   }
@@ -198,30 +224,47 @@ export default function SettingsPage() {
   async function playDemo(voiceId, provider, previewUrl) {
     if (playingDemo === voiceId) { stopDemo(); return; }
     stopDemo();
+    const reqId = demoReqRef.current;
+    const isStale = () => demoReqRef.current !== reqId;
     setPlayingDemo(voiceId);
     try {
       if (provider === 'browser') {
         const utt = new SpeechSynthesisUtterance('Hey there — WiseGuy AI at your service.');
-        utt.onend = utt.onerror = () => setPlayingDemo(null);
+        utt.onend = utt.onerror = () => { if (!isStale()) setPlayingDemo(null); };
         window.speechSynthesis.speak(utt);
         return;
       }
       let url = previewUrl;
+      let blobUrl = null;
       if (!url) {
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: 'Hey there — WiseGuy AI at your service.', provider, voice: voiceId }),
         });
+        if (isStale()) return;
         if (!res.ok) { setPlayingDemo(null); return; }
-        const blob = new Blob([await res.arrayBuffer()], { type: res.headers.get('Content-Type') || 'audio/mpeg' });
-        url = URL.createObjectURL(blob);
+        const buf = await res.arrayBuffer();
+        if (isStale()) return;
+        blobUrl = URL.createObjectURL(
+          new Blob([buf], { type: res.headers.get('Content-Type') || 'audio/mpeg' })
+        );
+        url = blobUrl;
       }
       const audio = new Audio(url);
+      audio._blobUrl = blobUrl;
       demoAudioRef.current = audio;
-      audio.onended = audio.onerror = () => { setPlayingDemo(null); if (!previewUrl) URL.revokeObjectURL(url); };
-      audio.play().catch(() => setPlayingDemo(null));
-    } catch { setPlayingDemo(null); }
+      const finish = () => {
+        if (demoAudioRef.current !== audio) return;
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        demoAudioRef.current = null;
+        setPlayingDemo(null);
+      };
+      audio.onended = audio.onerror = finish;
+      audio.play().catch(finish);
+    } catch {
+      if (!isStale()) setPlayingDemo(null);
+    }
   }
 
   // ── Design a Voice ──────────────────────────────────────────────────
