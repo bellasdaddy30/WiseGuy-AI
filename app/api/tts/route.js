@@ -1,5 +1,6 @@
 import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG, PERSONA_ELEVENLABS_VOICE } from '../../../lib/tts';
 import { getApiKey } from '../../../lib/providers';
+import { trimTrailingBurst } from '../../../lib/pcmTail';
 
 export const maxDuration = 30;
 
@@ -97,7 +98,13 @@ async function googleTts(text, voiceName, persona) {
   const rawPcm = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const rateM  = mime.match(/rate=(\d+)/);
   const rate   = rateM ? parseInt(rateM[1]) : 24000;
-  const pcm    = applyFades(rawPcm, rate);
+  // Google sometimes adds a burst of noise after the voice has finished (the
+  // "scratched record" at the end of a reply). Cut it before anything else.
+  const { pcm: cleanPcm, info: tail } = trimTrailingBurst(rawPcm, rate);
+  // Logged whenever a clip ends with a short sound after a pause, trimmed or
+  // not, so the Vercel logs show how often this fires and what it measured.
+  if (tail) console.log('[tts/google] tail', JSON.stringify(tail));
+  const pcm    = applyFades(cleanPcm, rate);
   const header = buildWavHeader(pcm.length, rate);
   const wav    = new Uint8Array(header.length + pcm.length);
   wav.set(header);
