@@ -17,10 +17,13 @@ import styles from './settings.module.css';
 const TTS_PROVIDERS = [
   { id: 'browser',    label: 'Browser',    desc: 'Built-in. Free, works everywhere. Basic quality.' },
   { id: 'google',     label: 'Google',     desc: 'High quality. Free via your Gemini API key.' },
-  { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Premium voices. Each persona gets its own voice. Needs ELEVENLABS_API_KEY.' },
-  { id: 'openai',     label: 'OpenAI',     desc: 'High quality. Needs OPENAI_API_KEY.' },
-  { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.' },
+  { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Premium voices. Each persona gets its own voice.', adminOnly: true },
+  { id: 'openai',     label: 'OpenAI',     desc: 'High quality. Needs OPENAI_API_KEY.', adminOnly: true },
+  { id: 'orpheus',    label: 'Orpheus',    desc: 'Emotion-reactive. Free via your Groq API key.', adminOnly: true },
 ];
+
+const ADMIN_PIN = process.env.NEXT_PUBLIC_ADMIN_PIN ?? '';
+const ADMIN_KEY = 'adminUnlocked';
 
 const VOICE_MODES = [
   { id: 'off',       label: 'Off',          desc: 'No voice. Text only.' },
@@ -65,10 +68,11 @@ export default function SettingsPage() {
   const [dvSaved,          setDvSaved]          = useState(false);
   const [dvError,          setDvError]          = useState('');
 
-  const [clearConfirm, setClearConfirm] = useState(false);
-  const [cleared,      setCleared]      = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
-  const [saved,        setSaved]        = useState(false);
+  const [clearConfirm,   setClearConfirm]   = useState(false);
+  const [cleared,        setCleared]        = useState(false);
+  const [resetConfirm,   setResetConfirm]   = useState(false);
+  const [saved,          setSaved]          = useState(false);
+  const [adminUnlocked,  setAdminUnlocked]  = useState(false);
 
   // Memory
   const [memoryItems, setMemoryItems] = useState([]);
@@ -91,8 +95,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMemoryItems(getMemory());
+    const isUnlocked = !ADMIN_PIN || load(ADMIN_KEY, '') === ADMIN_PIN;
+    setAdminUnlocked(isUnlocked);
     const tp = load(TTS_PROVIDER_KEY, DEFAULT_TTS_PROVIDER);
-    setTtsProvider(tp);
+    // If a locked provider is stored but admin isn't unlocked, fall back to browser
+    const resolvedTp = (!isUnlocked && TTS_PROVIDERS.find(p => p.id === tp)?.adminOnly)
+      ? DEFAULT_TTS_PROVIDER : tp;
+    setTtsProvider(resolvedTp);
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
     setOaVoice(load(TTS_VOICE_OPENAI_KEY, DEFAULT_OPENAI_VOICE));
@@ -100,7 +109,7 @@ export default function SettingsPage() {
     setAiVoice(load(AI_VOICE_KEY, 'true') === 'true');
     const hf = load(HANDS_FREE_KEY, 'false') === 'true';
     setVoiceMode(hf ? 'handsfree' : load(VOICE_MODE_KEY, 'off'));
-    if (tp === 'elevenlabs') fetchElVoices();
+    if (resolvedTp === 'elevenlabs') fetchElVoices();
   }, []);
 
   function handleSave() {
@@ -290,7 +299,7 @@ export default function SettingsPage() {
         <p className={styles.sectionDesc}>Which service reads AI responses aloud. All free.</p>
 
         <div className={styles.providerGrid}>
-          {TTS_PROVIDERS.map(p => (
+          {TTS_PROVIDERS.filter(p => !p.adminOnly || adminUnlocked).map(p => (
             <button
               key={p.id}
               className={`${styles.providerCard} ${ttsProvider === p.id ? styles.active : ''}`}
@@ -553,6 +562,36 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+
+      {/* Admin unlock — only visible when NEXT_PUBLIC_ADMIN_PIN is set */}
+      {ADMIN_PIN && (
+        <div className={styles.adminRow}>
+          {adminUnlocked ? (
+            <button className={styles.adminBtn} onClick={() => {
+              save(ADMIN_KEY, '');
+              setAdminUnlocked(false);
+              if (TTS_PROVIDERS.find(p => p.id === ttsProvider)?.adminOnly) {
+                setTtsProvider(DEFAULT_TTS_PROVIDER);
+              }
+            }}>
+              Admin: ON — tap to lock
+            </button>
+          ) : (
+            <button className={styles.adminBtn} onClick={() => {
+              const pin = window.prompt('Admin PIN:');
+              if (pin === null) return;
+              if (pin === ADMIN_PIN) {
+                save(ADMIN_KEY, ADMIN_PIN);
+                setAdminUnlocked(true);
+              } else {
+                window.alert('Incorrect PIN.');
+              }
+            }}>
+              Admin unlock
+            </button>
+          )}
+        </div>
+      )}
     </main>
   );
 }

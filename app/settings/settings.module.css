@@ -650,6 +650,27 @@
 .designError   { font-size: 0.85rem; color: #ef4444; }
 .designSuccess { font-size: 0.85rem; color: #22c55e; }
 
+/* ── Admin unlock ────────────────────────────────── */
+.adminRow {
+  padding: 1.5rem 0 0.5rem;
+  text-align: center;
+}
+
+.adminBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim, #555);
+  font-size: 0.72rem;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.2s;
+  padding: 0.25rem 0.5rem;
+}
+
+.adminBtn:hover {
+  opacity: 0.85;
+}
+
 @media (max-width: 480px) {
   .providerGrid,
   .modeGrid {
