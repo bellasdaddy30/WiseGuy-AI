@@ -18,6 +18,7 @@ import {
   normalizeVoiceFx, loadVoiceFx, saveVoiceFx, matchingPreset, browserVoiceParams, playTuned,
 } from '../../lib/voicefx';
 import { SAMPLE_MIN, SAMPLE_MAX, DESCRIPTION_MAX } from '../../lib/voiceDesign';
+import BuildCheck from '../../components/BuildCheck';
 import styles from './settings.module.css';
 
 const TTS_PROVIDERS = [
@@ -874,6 +875,13 @@ export default function SettingsPage() {
             {resetConfirm ? 'Tap again to confirm' : 'Reset'}
           </button>
         </div>
+      </section>
+
+      {/* ── APP VERSION ──────────────────────────────────────── */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionLabel}>App Version</h2>
+        <p className={styles.sectionDesc}>Shows whether the newest code has actually reached this screen.</p>
+        <BuildCheck />
       </section>
 
       {/* Admin unlock — the server checks the PIN and sets a signed cookie */}
