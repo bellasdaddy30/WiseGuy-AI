@@ -50,8 +50,12 @@ Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
   the server and the Account page says so. A database outage must never block sign-in.
 - Still on the device only (localStorage), not in the database yet: chat history, memory,
   settings, voice tuning.
-- Not done yet: `/api/chat` and the free voices do not check who is calling, and
-  `useIsPremium()` still returns true for everyone.
+- **Sign-in is required** to use the app (`proxy.js`, Next 16's renamed middleware).
+  Open without sign-in: `/`, `/account`, `/paid`, `/api/auth/*`, `/api/health`,
+  `/api/version`, and static files. Other pages redirect to `/account?next=…`; other API
+  routes return 401. Google sign-in must be **published** (or the person added as a test
+  user) in Google Cloud, or nobody but test users can get in.
+- Not done yet: per-user daily limits, and `useIsPremium()` still returns true for everyone.
 
 ## Admin lock (paid voices)
 

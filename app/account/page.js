@@ -25,8 +25,16 @@ async function loadAccount(session) {
   }
 }
 
-export default async function AccountPage() {
+// Where to go after signing in. Only same-site paths are allowed, so a link
+// like /account?next=https://evil.example can't bounce people off the site.
+function safeNext(value) {
+  const v = typeof value === 'string' ? value : '';
+  return v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\') ? v : '/chat';
+}
+
+export default async function AccountPage({ searchParams }) {
   const session = await auth();
+  const next = safeNext((await searchParams)?.next);
 
   if (!session?.user) {
     return (
@@ -34,12 +42,12 @@ export default async function AccountPage() {
         <div className={styles.card}>
           <h1 className={styles.title}>Sign In</h1>
           <p className={styles.subtitle}>
-            Sign in with Google. Your settings and chat history are saved on this device; syncing them across devices is coming soon.
+            Sign in with Google to use WiseGuy. Your settings and chat history are saved on this device; syncing them across devices is coming soon.
           </p>
           <form
             action={async () => {
               'use server';
-              await signIn('google', { redirectTo: '/chat' });
+              await signIn('google', { redirectTo: next });
             }}
           >
             <button type="submit" className={styles.googleBtn}>
