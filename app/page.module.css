@@ -392,6 +392,16 @@
   color: var(--text-dim);
 }
 
+.footerLinks {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+}
+
+.footerLinks a {
+  color: var(--text-muted);
+}
+
 @media (max-width: 600px) {
   .heroContent { gap: 1.25rem; }
   .ctas { flex-direction: column; align-items: stretch; }

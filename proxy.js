@@ -10,7 +10,7 @@ import { auth } from './auth';
 //
 // The pages below stay open so people can see what the app is and sign in.
 
-const PUBLIC_PAGES = new Set(['/', '/account', '/paid']);
+const PUBLIC_PAGES = new Set(['/', '/account', '/paid', '/privacy', '/terms']);
 
 const PUBLIC_API = [
   '/api/auth/',      // Google sign-in itself

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth, signIn, signOut } from '../../auth';
 import { dbConfigured } from '../../lib/db';
 import { getUser } from '../../lib/users';
@@ -55,6 +56,10 @@ export default async function AccountPage({ searchParams }) {
               Continue with Google
             </button>
           </form>
+          <p className={styles.legal}>
+            By continuing you confirm you&apos;re 18+ and agree to the{' '}
+            <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.
+          </p>
         </div>
       </main>
     );

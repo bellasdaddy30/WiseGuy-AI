@@ -14,7 +14,7 @@ const CACHE = 'wiseguy-v3';
 // Shell pages saved up front so the app still opens with no signal
 // Only pages anyone can open. The rest need sign-in, so caching them before
 // sign-in would store the sign-in page under their names.
-const PRECACHE = ['/', '/paid', '/account'];
+const PRECACHE = ['/', '/paid', '/account', '/privacy', '/terms'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

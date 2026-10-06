@@ -112,7 +112,11 @@ export default function Home() {
       {/* ── Footer ─────────────────────────────── */}
       <footer className={styles.footer}>
         <span className={styles.footerBrand}>WiseGuy AI</span>
-        <span className={styles.footerNote}>Your settings live in this browser. No account required.</span>
+        <span className={styles.footerNote}>18+ only. Sign in with Google to start.</span>
+        <nav className={styles.footerLinks}>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+        </nav>
       </footer>
 
     </main>

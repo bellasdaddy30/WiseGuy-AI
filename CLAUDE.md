@@ -51,7 +51,7 @@ Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
 - Still on the device only (localStorage), not in the database yet: chat history, memory,
   settings, voice tuning.
 - **Sign-in is required** to use the app (`proxy.js`, Next 16's renamed middleware).
-  Open without sign-in: `/`, `/account`, `/paid`, `/api/auth/*`, `/api/health`,
+  Open without sign-in: `/`, `/account`, `/paid`, `/privacy`, `/terms`, `/api/auth/*`, `/api/health`,
   `/api/version`, and static files. Other pages redirect to `/account?next=…`; other API
   routes return 401. Google sign-in must be **published** (or the person added as a test
   user) in Google Cloud, or nobody but test users can get in.
