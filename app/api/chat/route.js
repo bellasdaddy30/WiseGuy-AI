@@ -1,6 +1,9 @@
 import { getModel } from '../../../lib/models';
 import { getClient, getProviderLabel, MissingKeyError } from '../../../lib/providers';
 import { buildSystemPrompt } from '../../../lib/personality';
+import { auth } from '../../../auth';
+import { isAdmin } from '../../../lib/adminAuth';
+import { takeMessage, refundMessage, limitReachedMessage } from '../../../lib/usage';
 
 // Vercel: allow up to 60s for streaming AI responses (requires Pro plan;
 // Hobby plan caps at 10s which can cut off long responses).
@@ -49,6 +52,17 @@ export async function POST(request) {
     }
   }
 
+  // Daily limit for free users. The owner (admin cookie) is never limited.
+  // Checked after the request is validated, so a malformed request doesn't
+  // use up a message.
+  const userId = isAdmin(request) ? null : (await auth())?.user?.id;
+  if (userId) {
+    const usage = await takeMessage(userId);
+    if (!usage.ok) {
+      return Response.json({ error: limitReachedMessage(usage.limit), limitReached: true }, { status: 429 });
+    }
+  }
+
   const model = getModel(requestedModel);
   const providerLabel = getProviderLabel(model.provider);
 
@@ -65,6 +79,8 @@ export async function POST(request) {
     stream = await client.chat.completions.create(reqBody);
   } catch (err) {
     console.error(`[chat] ${providerLabel} / ${model.id}:`, err?.status ?? '', err?.message);
+    // The AI never answered, so this message shouldn't count against today.
+    if (userId) await refundMessage(userId);
     return Response.json({ error: describeError(err, providerLabel) }, { status: 502 });
   }
 

@@ -30,7 +30,8 @@ name is `wiseguy-ai`. Read this fully first.
 `ELEVENLABS_API_KEY`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`,
 `ADMIN_PIN`, `DATABASE_URL` (added to Vercel by the Neon integration; Ragnarok has none).
 Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
-`QWEN_SPACE` (use a different Space than the default).
+`QWEN_SPACE` (use a different Space than the default), `FREE_DAILY_MESSAGES` (free
+plan's daily chat limit; default 25).
 
 ## Database (who has signed in, and their plan)
 
@@ -55,7 +56,12 @@ Optional: `HF_TOKEN` (Hugging Face read token, for the Qwen voice),
   `/api/version`, and static files. Other pages redirect to `/account?next=…`; other API
   routes return 401. Google sign-in must be **published** (or the person added as a test
   user) in Google Cloud, or nobody but test users can get in.
-- Not done yet: per-user daily limits, and `useIsPremium()` still returns true for everyone.
+- **Daily chat limit** (`lib/usage.js`, `usage` table): free users get 25 messages a day
+  (`FREE_DAILY_MESSAGES` overrides), reset at midnight Central. The owner (admin cookie)
+  and any non-`free` plan are unlimited. A message the AI fails to answer is given back.
+  No database or a database error lets the message through, same rule as sign-in.
+- Not done yet: `useIsPremium()` still returns true for everyone, so every signed-in
+  person gets the Pro personas.
 
 ## Admin lock (paid voices)
 
