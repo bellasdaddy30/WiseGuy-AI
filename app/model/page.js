@@ -12,7 +12,7 @@ const PROVIDER_LABELS = {
   google: 'Google',
 };
 
-const PROVIDERS = ['groq', 'google', 'openai'];
+const PROVIDERS = [...new Set(MODELS.map(m => m.provider))];
 
 export default function ModelPage() {
   const [selected, setSelected] = useState(DEFAULT_MODEL);
