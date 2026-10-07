@@ -1,4 +1,4 @@
-import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG, PERSONA_ELEVENLABS_VOICE } from '../../../lib/tts';
+import { PERSONA_VOICE_STYLE, PERSONA_ELEVENLABS_SETTINGS, PERSONA_ELEVENLABS_TAG } from '../../../lib/tts';
 import { getApiKey } from '../../../lib/providers';
 import { trimTrailingBurst } from '../../../lib/pcmTail';
 import { isAdmin, adminRequired } from '../../../lib/adminAuth';
@@ -123,8 +123,7 @@ async function elevenLabsTts(rawText, voiceId, persona) {
   const tag  = PERSONA_ELEVENLABS_TAG[persona];
   const text = tag ? `${tag} ${rawText}` : rawText;
 
-  // Each persona has its own voice actor — override the user's generic pick.
-  const resolvedVoiceId = PERSONA_ELEVENLABS_VOICE[persona] ?? voiceId;
+  const resolvedVoiceId = voiceId || 'N2lVS1w4EtoT3dr4eOWO';
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {

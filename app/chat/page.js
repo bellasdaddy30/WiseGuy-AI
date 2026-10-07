@@ -65,6 +65,8 @@ export default function ChatPage() {
   const audioCtxRef    = useRef(null);
   const sourceNodeRef  = useRef(null);
   const speechRef      = useRef(null);
+  const streamAbortRef    = useRef(null);  // AbortController for the current LLM fetch
+  const pendingInterruptRef = useRef(null); // text queued during an interrupt
   const voiceCooldownRef = useRef({}); // provider -> timestamp until which it's skipped
   // Refs so async closures always see current values
   const voiceModeRef   = useRef(voiceMode);
@@ -188,6 +190,9 @@ export default function ChatPage() {
   }
 
   function stopAudio() {
+    // Abort any in-flight LLM stream so the partial response settles immediately.
+    streamAbortRef.current?.abort('interrupted');
+    streamAbortRef.current = null;
     const q = speechRef.current;
     if (q) { q.cancelled = true; q.resolveCurrent?.(); speechRef.current = null; }
     try { if (sourceNodeRef.current) { sourceNodeRef.current.stop(); sourceNodeRef.current = null; } } catch {}
@@ -684,7 +689,16 @@ export default function ChatPage() {
   }
 
   const submitText = useCallback(async (text) => {
-    if (!text || loadingRef.current) return;
+    if (!text) return;
+
+    // If the previous response is still streaming, abort it and queue this
+    // question to fire once loading clears (the abort resolves it quickly).
+    if (loadingRef.current) {
+      pendingInterruptRef.current = text;
+      stopAudio(); // this aborts the stream too
+      return;
+    }
+
     stopAudio();
 
     const userMsg = { role: 'user', content: text };
@@ -695,9 +709,11 @@ export default function ChatPage() {
     setLoading(true);
 
     let fullResponse = '';
-    // In hands-free mode, start listening again once the AI finishes speaking.
     const afterSpeech = () => { if (handsFreeModeRef.current) startListening({ auto: true }); };
     const speech = startSpeech(afterSpeech);
+
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
 
     try {
       const chatBody = {
@@ -711,6 +727,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(chatBody),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -753,12 +770,26 @@ export default function ChatPage() {
       else afterSpeech();
     } catch (err) {
       if (speech) speech.cancelled = true;
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: err?.message || ERROR_REPLY };
-        return updated;
-      });
+
+      if (err.name === 'AbortError') {
+        // User interrupted — leave whatever partial text is already in the message
+        // (it becomes context for the follow-up question). Only clean up if the
+        // assistant turn was empty.
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last?.role === 'assistant' && !last.content) updated.pop();
+          return updated;
+        });
+      } else {
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', content: err?.message || ERROR_REPLY };
+          return updated;
+        });
+      }
     } finally {
+      streamAbortRef.current = null;
       setLoading(false);
       if (!handsFreeModeRef.current) inputRef.current?.focus();
     }
@@ -767,6 +798,15 @@ export default function ChatPage() {
   // Keep submitTextRef pointing at the latest submitText so the continuous loop
   // never closes over a stale version (model or personality may have changed).
   useEffect(() => { submitTextRef.current = submitText; }, [submitText]);
+
+  // When loading clears after an interrupt-abort, fire the queued question.
+  useEffect(() => {
+    if (!loading && pendingInterruptRef.current) {
+      const pending = pendingInterruptRef.current;
+      pendingInterruptRef.current = null;
+      submitTextRef.current?.(pending);
+    }
+  }, [loading]);
 
   function startNewChat() {
     stopAudio();
