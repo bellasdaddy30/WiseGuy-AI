@@ -4,6 +4,7 @@ import SessionProvider from '../components/SessionProvider';
 import PWARegister from '../components/PWARegister';
 import AgeGate from '../components/AgeGate';
 import { auth } from '../auth';
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata = {
   title: 'WiseGuy AI',
@@ -41,6 +42,7 @@ export default async function RootLayout({ children }) {
           <Navbar />
           {children}
         </SessionProvider>
+        <Analytics />
       </body>
     </html>
   );
