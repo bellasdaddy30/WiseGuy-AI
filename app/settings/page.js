@@ -132,6 +132,9 @@ export default function SettingsPage() {
   const [resetConfirm,   setResetConfirm]   = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [adminUnlocked,  setAdminUnlocked]  = useState(false);
+  const [ownerUnlocked,  setOwnerUnlocked]  = useState(false);
+  const [dbHealth,       setDbHealth]       = useState(null); // null | 'ok' | 'error' | 'not_configured'
+  const [dbChecking,     setDbChecking]     = useState(false);
 
   // Memory
   const [memoryItems, setMemoryItems] = useState([]);
@@ -165,6 +168,10 @@ export default function SettingsPage() {
         if (!d.admin && TTS_PROVIDERS.find(p => p.id === tp)?.adminOnly) setTtsProvider(DEFAULT_TTS_PROVIDER);
         else if (d.admin && tp === 'elevenlabs') fetchElVoices();
       })
+      .catch(() => {});
+    fetch('/api/owner-unlock')
+      .then(r => r.json())
+      .then(d => setOwnerUnlocked(!!d.owner))
       .catch(() => {});
     setGoogleVoice(load(TTS_VOICE_GOOGLE_KEY, DEFAULT_GOOGLE_VOICE));
     setElVoice(load(TTS_VOICE_ELEVENLABS_KEY, DEFAULT_ELEVENLABS_VOICE));
@@ -279,6 +286,19 @@ export default function SettingsPage() {
     setMemoryItems([]);
     setMemCleared(true);
     setTimeout(() => setMemCleared(false), 3000);
+  }
+
+  async function checkDbHealth() {
+    setDbChecking(true);
+    try {
+      const res = await fetch('/api/health');
+      const d   = await res.json().catch(() => ({}));
+      setDbHealth(d.status ?? 'error');
+    } catch {
+      setDbHealth('error');
+    } finally {
+      setDbChecking(false);
+    }
   }
 
   // ── Voice demo ──────────────────────────────────────────────────────
@@ -923,7 +943,7 @@ export default function SettingsPage() {
         <BuildCheck />
       </section>
 
-      {/* Admin unlock — the server checks the PIN and sets a signed cookie */}
+      {/* Admin unlock — unlocks extra voices for all users */}
       <div className={styles.adminRow}>
         {adminUnlocked ? (
           <button className={styles.adminBtn} onClick={() => {
@@ -960,6 +980,62 @@ export default function SettingsPage() {
           </button>
         )}
       </div>
+
+      {/* Owner unlock — Chris only. Separate PIN, separate cookie. */}
+      <div className={styles.adminRow}>
+        {ownerUnlocked ? (
+          <button className={styles.adminBtn} onClick={() => {
+            fetch('/api/owner-unlock', { method: 'DELETE' }).catch(() => {});
+            setOwnerUnlocked(false);
+            setDbHealth(null);
+          }}>
+            Owner: ON — tap to lock
+          </button>
+        ) : (
+          <button className={styles.adminBtn} onClick={async () => {
+            const pin = window.prompt('Owner PIN:');
+            if (pin === null) return;
+            try {
+              const res = await fetch('/api/owner-unlock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (data.granted) {
+                setOwnerUnlocked(true);
+              } else {
+                window.alert(data.error || 'Incorrect PIN.');
+              }
+            } catch {
+              window.alert('Could not reach server. Try again.');
+            }
+          }}>
+            Owner unlock
+          </button>
+        )}
+      </div>
+
+      {ownerUnlocked && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionLabel}>Owner Panel</h2>
+
+          <div className={styles.dataRow}>
+            <div>
+              <div className={styles.dataLabel}>Database</div>
+              <div className={styles.dataDesc}>
+                {dbHealth === null    && 'Tap to check the Neon connection.'}
+                {dbHealth === 'ok'   && '✓ Connected'}
+                {dbHealth === 'not_configured' && 'DATABASE_URL not set — running without a database.'}
+                {dbHealth === 'error' && '✗ Connection error — check Vercel logs.'}
+              </div>
+            </div>
+            <button className={styles.dangerBtn} onClick={checkDbHealth} disabled={dbChecking}>
+              {dbChecking ? 'Checking…' : 'Check DB'}
+            </button>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
